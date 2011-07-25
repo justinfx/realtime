@@ -3,13 +3,13 @@ package main
 import (
 	"flag"
 	"log"
-	"socketio"
 	"http"
 	"fmt"
 	"strings"
+	"socketio"
+//	"tideland-rdc.googlecode.com/hg"
 //	"time"
 //	"os"
-//	"redis"
 )
 
 type Config struct {
@@ -21,14 +21,26 @@ type Config struct {
 	ALLOWED_TYPES []string
 }
 
+var CONFIG	*Config 
 
-var (
-	SERVER 	*socketio.SocketIO
-	CONFIG	*Config 
-)
+
+func Debugln(v ...interface{}) {
+	if CONFIG.DEBUG {
+		log.Println(v...)
+	}
+}
+
+func Debugf(f string, v ...interface{}) {
+	if CONFIG.DEBUG {
+		log.Printf(f, v...)
+	}
+}
+
+
 
 func main() {
 	
+	// setup and options
 	CONFIG = &Config{
 		DEBUG: true,
 		DOMAINS: nil,
@@ -56,31 +68,36 @@ func main() {
 	Debugf("Using config options: DEBUG=%v, PORT=%v, FLASHPORT=%v, DOMAINS=%v", 
 		CONFIG.DEBUG, CONFIG.PORT, CONFIG.FLASHPORT, CONFIG.DOMAINS)
 		
+		
 	// create the socket.io server
 	config := socketio.DefaultConfig
-	config.QueueLength = 100000
+	config.QueueLength = 50
 	config.HeartbeatInterval = 12e9
 	config.Resource = "/realtime/"
 	config.Origins = []string{fmt.Sprintf("localhost:%v", CONFIG.PORT)}
-	SERVER := socketio.NewSocketIO(&config)
 	
-	handler := ServerHandler{SERVER}
+	sio 	:= socketio.NewSocketIO(&config)
+	//rd		:= rdc.NewRedisDatabase(rdc.Configuration{})
+	handler := ServerHandler{sio}
 	
-	SERVER.OnConnect(func(c *socketio.Conn){handler.OnConnect(c)})
-	SERVER.OnDisconnect(func(c *socketio.Conn){handler.OnDisconnect(c)})
-	SERVER.OnMessage(func(c *socketio.Conn, msg socketio.Message){handler.OnMessage(c, msg)})
+	//sio.OnConnect(func(c *socketio.Conn){handler.OnConnect(c)})
+	sio.OnDisconnect(func(c *socketio.Conn){handler.OnDisconnect(c)})
+	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message){handler.OnMessage(c, msg)})
+	
 	
 	// start the flash server
 	go func() {
-		if err := SERVER.ListenAndServeFlashPolicy(fmt.Sprintf(":%v", CONFIG.FLASHPORT)); err != nil {
+		if err := sio.ListenAndServeFlashPolicy(fmt.Sprintf(":%v", CONFIG.FLASHPORT)); err != nil {
 			log.Println(err)
 		}
 	}()
 	
 	log.Printf("Server starting. Tune your browser to http://localhost:%v/", CONFIG.PORT)
 
+
 	// mux and server
-	mux := SERVER.ServeMux()
+	mux := sio.ServeMux()
+	// this is temporary
 	mux.Handle("/", http.FileServer("static/", "/"))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%v", CONFIG.PORT), mux); err != nil {

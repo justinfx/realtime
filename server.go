@@ -1,30 +1,32 @@
 package main
 
-import (
-	"os"
-	"socketio"
-	"json"
-)
-
-
 /*
 	Server
 	
 	Stores a reference to the current socketio server instance
 	and handles all communications between connected clients.
 */
+
+
+import (
+	"os"
+	"socketio"
+	"json"
+	//"tideland-rdc.googlecode.com/hg"
+)
+
+
 type ServerHandler struct {
 	sio *socketio.SocketIO 
+	//db	*rdc.RedisDatabase
 }
 
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 	Debugln("New connection:", c)
-	//s.sio.Broadcast(Announcement{"Connected: " + c.String()})
 }
 
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	Debugln("Client Disconnected:", c)
-	//s.sio.Broadcast(Announcement{"Disconnected: " + c.String()})
 }
 
 // When a raw message comes in from a connected client, we need
@@ -102,8 +104,20 @@ func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err os.Er
 	return err
 }
 
-//[---- System Commands
+func (s *ServerHandler) publish(msg *message) (err os.Error) {
+	if msg.Channel == "" || msg.Data == nil || len(msg.Data) == 0 {
+		err = os.NewError("msg either has no channel or no data. not publishing")
+		return err
+	}
+	
+	s.db.Publish(msg.Channel, msg)
+	
+	return 
+}
 
+//
+// System Commands
+//
 func (s *ServerHandler) subscribeCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	Debugln("subscribeCmd():", c, msg.raw)
 	reply := NewCommand()
@@ -127,5 +141,4 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	
 	return
 }
-
 // END System Commands ----]

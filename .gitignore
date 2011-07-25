@@ -1,5 +1,6 @@
 *.6
 _*
 *.out
+*.rdb
 build
 dist
