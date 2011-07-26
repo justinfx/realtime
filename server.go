@@ -196,10 +196,12 @@ func (s *ServerHandler) startDispatcher() {
 			reply	*message
 			ok 		bool
 			typ		string
-			members *list.List
 			elem	*list.Element
 			client, clientTest	Client
 
+			members = list.New()
+			toRemove = list.New()
+			
 		)
 		
 		for {
@@ -285,6 +287,8 @@ func (s *ServerHandler) startDispatcher() {
 				
 				Debugf("startDispatcher(): Routing msg from to \"%v\"", msg.Channel)
 				
+				toRemove.Init()
+				
 				for e := members.Front(); e != nil; e = e.Next() {
 					
 					client = e.Value.(Client)
@@ -294,11 +298,16 @@ func (s *ServerHandler) startDispatcher() {
 						// track their subscriptions
 						// TODO: impliment a form of persistance so that
 						// reconnecting clients can resume the last state
-						elem = e.Prev()
-						members.Remove(e)
-						e = elem
+						toRemove.PushBack(e)
 					}
-				} 				
+				} 
+				if toRemove.Len() > 0 {
+					for e := toRemove.Front(); e != nil; e = e.Next() {
+						elem = e.Value.(*list.Element)
+						members.Remove(elem)
+					}
+					toRemove.Init()
+				}
 				
 			}
 		}
