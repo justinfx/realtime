@@ -2,6 +2,7 @@ package main
 
 import (
 	"time"
+	"socketio"
 )
 
 const (
@@ -19,15 +20,18 @@ const (
 	client.
 */
 type message struct {
-	Type string "type"
-	Channel string "channel"
-	Success bool "success"
-	Error string "error"
-	Identity string "identity"
-	Timestamp string "timestamp"
-	Data map[string]interface{} "data" // client-side specific
-	raw string
-	mtype int
+	Type 		string "type"
+	Channel 	string "channel"
+	Success 	bool "success"
+	Error 		string "error"
+	Identity 	string "identity"
+	Timestamp 	string "timestamp"
+	Data 		map[string]interface{} "data" // client-side specific
+	
+	raw 		string
+	mtype 		int
+	conn		*socketio.Conn
+	
 }
 
 func (m *message) setRaw(data string) {

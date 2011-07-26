@@ -78,7 +78,8 @@ func main() {
 	
 	sio 	:= socketio.NewSocketIO(&config)
 	//rd		:= rdc.NewRedisDatabase(rdc.Configuration{})
-	handler := ServerHandler{sio}
+	handler := NewServerHandler(sio)
+	
 	
 	//sio.OnConnect(func(c *socketio.Conn){handler.OnConnect(c)})
 	sio.OnDisconnect(func(c *socketio.Conn){handler.OnDisconnect(c)})

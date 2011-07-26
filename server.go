@@ -10,6 +10,7 @@ package main
 
 import (
 	"os"
+	"container/list"
 	"socketio"
 	"json"
 	//"tideland-rdc.googlecode.com/hg"
@@ -17,9 +18,36 @@ import (
 
 
 type ServerHandler struct {
-	sio *socketio.SocketIO 
+	Sio 	*socketio.SocketIO 
 	//db	*rdc.RedisDatabase
+	
+	subs 		map[string]*list.List
+	msgChannel 	chan *message
+	srvcChannel chan *message
+	
 }
+
+type Client struct {
+	Identity	string
+	Conn		*socketio.Conn
+}
+
+type DispatchReq struct {
+	msg 	*message
+	result 	chan interface{}
+}
+
+func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
+	s = &ServerHandler{
+		Sio: 			sio,
+		subs: 			make(map[string]*list.List),
+		msgChannel: 	make(chan *message),
+		srvcChannel: 	make(chan *message),
+	}
+	s.startDispatcher()
+	
+	return s
+} 
 
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 	Debugln("New connection:", c)
@@ -52,16 +80,16 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 
 	switch msg.Type {
 	
-	case "command": 
-		msg.mtype = CommandType
-		err = s.handleCommand(c, msg)
-	
-	case "message": 
-		msg.mtype = MessageType
-		err = s.handleMessage(c, msg)
-	
-	default: 
-		err = os.NewError("Malformed command message")	
+		case "command": 
+			msg.mtype = CommandType
+			err = s.handleCommand(c, msg)
+		
+		case "message": 
+			msg.mtype = MessageType
+			err = s.handleMessage(c, msg)
+		
+		default: 
+			err = os.NewError("Malformed command message")	
 	}
 	
 	if err != nil {
@@ -77,19 +105,22 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 
 	switch msg.Data["command"].(string) {
 	
-	case "": err = os.NewError("Malformed command message")	
-	case "subscribe": err = s.subscribeCmd(c, msg) 
-	case "unsubscribe": err = s.unsubscribeCmd(c, msg) 
-	case "init": err = s.initCmd(c, msg) 
-	
-	default: 
-		// not a system command. forward it on
-		if msg.Channel != "" {
-			Debugln("Forwarding generic command message:", msg.raw)
-			s.sio.Broadcast(msg.raw)
-		} else {
-			err = os.NewError("Generic command message has no channel")
-		}		
+		case "": err = os.NewError("Malformed command message")	
+		
+		case "subscribe": err = s.subscribeCmd(c, msg) 
+		
+		case "unsubscribe": err = s.unsubscribeCmd(c, msg) 
+		
+		case "init": err = s.initCmd(c, msg) 
+		
+		default: 
+			// not a system command. forward it on
+			if msg.Channel != "" {
+				Debugln("Forwarding generic command message:", msg.raw)
+				s.publish(msg)
+			} else {
+				err = os.NewError("Generic command message has no channel")
+			}		
 	}	
 
 	return err
@@ -100,39 +131,48 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 // to clients on the same channel
 func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err os.Error) {
 	Debugln("msgHandler():", c, msg.raw)
-	s.sio.Broadcast(msg)
+
+	msg.conn = c
+	s.publish(msg)
+
 	return err
 }
 
 func (s *ServerHandler) publish(msg *message) (err os.Error) {
+
 	if msg.Channel == "" || msg.Data == nil || len(msg.Data) == 0 {
 		err = os.NewError("msg either has no channel or no data. not publishing")
 		return err
 	}
 	
-	s.db.Publish(msg.Channel, msg)
+	go func() {
+		s.msgChannel <- msg
+	}()
+	
 	
 	return 
 }
 
-//
-// System Commands
-//
+
 func (s *ServerHandler) subscribeCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	Debugln("subscribeCmd():", c, msg.raw)
-	reply := NewCommand()
-	reply.Data["command"] = "onSubscribe"
-	reply.Data["options"] = msg.Data["options"]
-	s.sio.BroadcastExcept(c, reply)
+	
+	msg.conn = c
+	go func() { 
+		s.srvcChannel <-msg
+	}()
+	
 	return err
 }
 
 func (s *ServerHandler) unsubscribeCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	Debugln("unsubscribeCmd():", c, msg.raw)
-	reply := NewCommand()
-	reply.Data["command"] = "onUnsubscribe"
-	reply.Data["options"] = msg.Data["options"]
-	s.sio.BroadcastExcept(c, reply)
+
+	msg.conn = c
+	go func() { 
+		s.srvcChannel <-msg
+	}()
+	
 	return err
 }
 
@@ -141,4 +181,126 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	
 	return
 }
-// END System Commands ----]
+
+
+// A goroutine that coordinates the internal message
+// routing. Delivers messages to all members of the
+// given channel. Also processes (un)subscription commands
+// by updating an internal map.
+func (s *ServerHandler) startDispatcher() {
+
+	go func() {
+	
+		var (
+			msg 	*message
+			reply	*message
+			ok 		bool
+			typ		string
+			members *list.List
+			elem	*list.Element
+			client, clientTest	Client
+
+		)
+		
+		for {
+			
+			select {
+			
+			// Service messages include subscribe/unsubscribe
+			// commands and are checked on a seperate channel
+			// from messages so that their queue doest get 
+			// flooded
+			case msg, ok = <-s.srvcChannel:
+				if !ok { return }
+				if msg.Channel == "" { continue }
+				
+				members = s.subs[msg.Channel]
+				if members == nil {
+					members = list.New()
+					s.subs[msg.Channel] = members
+				} 
+				
+				typ = msg.Data["command"].(string)
+				
+				switch typ {	
+				
+				// add this member to the given channel
+				case "subscribe":
+					client = Client{msg.Identity, msg.conn}
+
+					for e := members.Front(); e != nil; e = e.Next() {
+						clientTest = e.Value.(Client)
+						if clientTest.Conn == client.Conn {
+							err := os.NewError("client already subscribed to channel")
+							Debugln(err)
+							continue
+						}
+					}
+					_ = members.PushBack(client)
+
+					reply = NewCommand()
+					reply.Data["command"] = "onSubscribe"
+					reply.Data["options"] = msg.Data["options"]
+					
+					s.publish(reply)
+						
+					Debugf("startDispatcher(): subscribed client %v to \"%v\"", client, msg.Channel)
+				
+				// remove this member from the given channel
+				case "unsubscribe":
+					ok = false
+					for e := members.Front(); e != nil; e = e.Next() {
+						client = e.Value.(Client)
+						if client.Conn == msg.conn {
+							elem = e.Prev()
+							members.Remove(e)
+							ok = true
+							Debugln("startDispatcher(): unsubscribing %v from %v", msg.conn, msg.Channel)
+							
+							break
+						}
+					} 
+					if ok {
+						reply = NewCommand()
+						reply.Data["command"] = "onUnsubscribe"
+						reply.Data["options"] = msg.Data["options"]		
+						
+						s.publish(reply)			
+					} else {
+						err := os.NewError("client was not subscribed to channel")
+						Debugln(err)	
+						continue				
+					}	
+				}					
+			
+			// standard message channel. a message that will get
+			// published to all other connections currently
+			// subscribed to the same channel
+			case msg, ok = <-s.msgChannel:
+				if !ok { return }
+				if msg.Channel == "" { continue }
+				
+				members = s.subs[msg.Channel]
+				if members == nil { continue }
+				
+				Debugf("startDispatcher(): Routing msg from to \"%v\"", msg.Channel)
+				
+				for e := members.Front(); e != nil; e = e.Next() {
+					
+					client = e.Value.(Client)
+					if client.Conn.Send(msg) != nil {
+						// getting an error here most likely means
+						// that the client disconnected. we should not
+						// track their subscriptions
+						// TODO: impliment a form of persistance so that
+						// reconnecting clients can resume the last state
+						elem = e.Prev()
+						members.Remove(e)
+						e = elem
+					}
+				} 				
+				
+			}
+		}
+	}()
+}
