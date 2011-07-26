@@ -43,7 +43,7 @@ func main() {
 	// setup and options
 	CONFIG = &Config{
 		DEBUG: true,
-		DOMAINS: nil,
+		DOMAINS: []string{"*"},
 		PORT: 8001,
 		FLASHPORT: 843,
 		HWM: 15,
@@ -55,7 +55,7 @@ func main() {
 	flag.BoolVar(&(CONFIG.DEBUG), "debug", false, "Print more feedback from the server")
 	flag.IntVar(&(CONFIG.PORT), "port", 8001, "Start the server on this port (Default 8001)")
 	flag.IntVar(&(CONFIG.FLASHPORT), "flashport", 843, "Start the flashsocket server on this port (Default 843)")
-	flag.StringVar(&domainVal, "domain", "", "Limit client connections to this domain origin")
+	flag.StringVar(&domainVal, "domains", "", "Limit client connections to these comma-sep domain origin:port")
 
 	flag.Parse()
 	
@@ -63,7 +63,7 @@ func main() {
 	for i, s := range domains {
 		domains[i] = strings.TrimSpace(s)
 	}	 
-	if len(domains)==0 { CONFIG.DOMAINS = domains }
+	if len(domains) != 0 { CONFIG.DOMAINS = domains }
 	
 	Debugf("Using config options: DEBUG=%v, PORT=%v, FLASHPORT=%v, DOMAINS=%v", 
 		CONFIG.DEBUG, CONFIG.PORT, CONFIG.FLASHPORT, CONFIG.DOMAINS)
@@ -71,10 +71,10 @@ func main() {
 		
 	// create the socket.io server
 	config := socketio.DefaultConfig
-	config.QueueLength = 50
+	config.QueueLength = CONFIG.HWM
 	config.HeartbeatInterval = 12e9
 	config.Resource = "/realtime/"
-	config.Origins = []string{fmt.Sprintf("localhost:%v", CONFIG.PORT)}
+	config.Origins = CONFIG.DOMAINS
 	
 	sio 	:= socketio.NewSocketIO(&config)
 	//rd		:= rdc.NewRedisDatabase(rdc.Configuration{})
