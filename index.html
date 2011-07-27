@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="http://cdn.socket.io/stable/socket.io.js"></script>
+  <script src="realtime.js"></script>
+  <style type="text/css">
+  	.announce {
+  		width:100%;
+  		background:#333;
+  	}
+  	.announce div {
+  		padding:10px;
+  		color:#ccc;
+  		font-size:14px;
+  		font-family:arial;
+  	}
+  </style>
+  <script type="text/javascript">
+    $(function() {
+
+		RT.debugging = true;
+		// strip script tags
+		//RT.strip = /<script>|<\/script>/gi;
+		
+		// strip script and iframe tags
+		// RT.strip = /<script>|<\/script>|<iframe>|<\/iframe>/gi;
+		
+		// strip all html
+		 RT.strip = /<[^>]*>/gi;
+		 //RT.realtime_server = "localhost";
+		 
+		
+		// connect with identity
+		RT.connect(prompt("Enter a nickname")); 
+		
+		// define channel methods
+		RT.createChannel("global_announce",{
+			onReceive : function(res) {
+				$("body").prepend("<div class='announce'><div>"+res.data.msg+"</div></div>");
+			},
+			onSubscribe : function(res) {
+				$("#chat").append("<div> user "+res.identity+" has connected to global </div>");
+			}
+		});
+		
+		
+		RT.createChannel("chat_advanced",{
+			onReceive : function(res) {
+				isTyping = 0;
+				doneTyping(res.identity);
+				// we could make msg be an object and have a type
+				// but were just gonna say if the first 4 is 'data' its an image
+				if(res.data.msg.substring(0,4) == "data") {
+					$("#chat").append("<div><img src='" + res.data.msg + "'/></div>");
+				} else {
+					//$("#chat").append("<div>"+res.identity+"["+res.timestamp+"] : " + res.data.msg + "</div>");
+					$("#chat").append("<div><b>"+res.identity+"</b>" + res.data.msg + "</div>");
+				}
+				// always scroll to bottom
+				$("#chat")[0].scrollTop = $("#chat")[0].scrollHeight;
+			},
+			onSubscribe : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has subscribed</div>");
+			},
+			onConnect : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has connected</div>");
+			},
+			onDisconnect : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has disconnected</div>");
+			},
+			onError : function(res) {
+				RT.debug("error: ",res);
+			},
+			
+			// custom methods
+			onTyping : function(res) {
+				if(res.identity) {
+					$("#"+res.identity).remove();
+					$("#chat").append("<div id='"+res.identity+"'>user "+res.identity+" is typing</div>");
+				}	
+			},
+			doneTyping : function(res) {
+				doneTyping(res.identity);
+			},
+			onFocus : function(res) {
+				$("#chat").append("<div>"+res.identity+" has focused the window</div>");
+			},
+			onBlur : function(res) {
+				$("#chat").append("<div>"+res.identity+" is doing something else</div>");
+			}
+		});
+
+		// on page load, connect to global
+    	RT.subscribe("global_announce");
+    	RT.subscribe("chat_advanced");
+		
+        //send the message when submit is clicked
+        $('#chatform').submit(function () {
+        	// call done typing
+			doneTyping(RT.identity);
+			if($("#chatText").val()) {
+        		RT.publish("chat_advanced",$("#chatText").val());
+				$("#chatText").val("");
+			}	
+            return false;
+        });
+     	
+     	// send a global message
+     	$("#sendGlobal").click(function() {
+     		RT.publish("global_announce",$("#global").val());
+			$("#global").val("");
+     	});  
+     	
+     	// drag and drop into the chat
+     	// dont allow dragover to stop us
+     	$("#chat").bind({
+     		dragover : function(e) {
+     			return false;
+     		},
+     		drop : function(e) {
+     			var file = e.originalEvent.dataTransfer.files[0];
+				var fr = new FileReader();
+				fr.onload = function(e) { 
+					RT.publish("chat_advanced",e.target.result);
+				}
+				fr.readAsDataURL(file);
+				return false;
+     		}
+     	});
+     	
+     	// we can track weather they user is looking at the chat or not
+     	$(window).focus(function() {
+     		RT.triggerEvent("chat_advanced","onFocus",{},true);
+     	}).blur(function() {
+     		RT.triggerEvent("chat_advanced","onBlur",{},true);
+     	});
+		
+		var typingTimer;
+		var isTyping = 0;
+		$("#chatText").keydown(function(e) {
+			// you hit enter after you clearn, causing typingt come back
+			if(e.keyCode != 13) {
+				// make sure doneTyping doesn't get called
+				clearTimeout(typingTimer);
+				// call onTyping
+				if(!isTyping) {
+					isTyping = 1;
+					// send the signal to everyone else that im typing
+					RT.triggerEvent("chat_advanced","onTyping",{},true);
+				}	
+				// wait 1 second to send done Typing
+				typingTimer = setTimeout(function() {
+					isTyping = false;
+					RT.triggerEvent("chat_advanced","doneTyping");
+				},2000);
+			}	
+		});
+     	
+    });
+    
+    function doneTyping(who) {
+    	if(who) {
+    		isTyping = 0;
+    		$("#"+who).remove();
+    	}	
+    }
+
+</script>
+</head>
+<body>
+<h3>Chat!</h3>
+<div id="chat" style="width: 60em; height: 20em; overflow:auto; border: 1px solid black">
+</div>
+<form id="chatform">
+<input type="text" id="chatText"/>
+<input type="submit" />
+</form>
+
+<br><br><br>
+<input type="text" id="global"/>
+<input id="sendGlobal" type="button" value="send global"/>
+</body>
+</html>

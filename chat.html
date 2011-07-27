@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="http://cdn.socket.io/stable/socket.io.js"></script>
+  <script src="realtime.js"></script>
+  <style type="text/css">
+  	#chat {
+  		width:300px;
+  		height:300px;
+  		border:1px solid black;
+  	}
+  </style>
+  <script type="text/javascript">
+    $(function() {
+
+		RT.debugging = true;
+		
+		// connect with identity 
+		RT.connect(prompt("Enter a nickname")); 
+		// creat the functionality for the chat
+		RT.createChannel("chat",{
+			onReceive : function(res) {
+				// append newly recieved message
+				$("#chat").append("<div>" + res.data.msg + "</div>");
+				// scroll to bottom
+				$("#chat")[0].scrollTop = $("#chat")[0].scrollHeight;
+			},
+			
+			// when a user subcribes, lets notify the chat
+			onSubscribe : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has connected</div>");
+			}
+		});
+
+		// on page load, connect to chat
+    	RT.subscribe("chat");
+		
+        //send the message when submit is clicked
+        $('#chatform').submit(function () {
+        	
+        	// make sure its not blank
+			if($("#chatText").val()) {
+				// publish
+        		RT.publish("chat",$("#chatText").val());
+        		// clear text field
+				$("#chatText").val("");
+			}	
+            return false;
+        });
+    });
+</script>
+</head>
+	<body>
+		<h3>Chat!</h3>
+		<div id="chat"></div>
+		<form id="chatform">
+			<input type="text" id="chatText"/>
+			<input type="submit" />
+		</form>
+	</body>
+</html>
