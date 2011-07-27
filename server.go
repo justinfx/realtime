@@ -11,8 +11,10 @@ package main
 import (
 	"os"
 	"container/list"
-	"socketio"
 	"json"
+	
+	// 3rd party
+	"socketio"
 	//"tideland-rdc.googlecode.com/hg"
 )
 

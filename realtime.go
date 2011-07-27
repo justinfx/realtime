@@ -6,12 +6,13 @@ import (
 	"http"
 	"fmt"
 	"strings"
-	"socketio"
 	"os"
 	"path/filepath"
+	
+	// 3rd party
+	"socketio"
 	"github.com/kless/goconfig/config"
 	//	"tideland-rdc.googlecode.com/hg"
-	//	"time"
 )
 
 
@@ -30,10 +31,10 @@ const (
 
 type Config struct {
 	DEBUG         bool
-	DOMAINS       []string
 	PORT          int
 	FLASHPORT     int
 	HWM           int
+	DOMAINS       []string
 	ALLOWED_TYPES []string
 }
 
@@ -42,10 +43,10 @@ func init() {
 	CONFIG = &Config{
 		DEBUG:         true,
 		DOMAINS:       []string{"*"},
+		ALLOWED_TYPES: []string{},
 		PORT:          8001,
 		FLASHPORT:     843,
 		HWM:           15,
-		ALLOWED_TYPES: []string{},
 	}
 
 	root, _ := filepath.Split(os.Args[0])
@@ -166,7 +167,6 @@ func main() {
 	}
 
 }
-
 
 func getConf() (*config.Config, os.Error) {
 	p1 := filepath.Join(ROOT, CONF_NAME)
