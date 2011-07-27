@@ -12,6 +12,8 @@ import (
 	"os"
 	"container/list"
 	"json"
+	"time"
+	"sync"
 	
 	// 3rd party
 	"socketio"
@@ -23,44 +25,60 @@ type ServerHandler struct {
 	Sio *socketio.SocketIO
 	//db	*rdc.RedisDatabase
 
-	subs        map[string]*list.List
-	msgChannel  chan *message
-	srvcChannel chan *message
+	subs, idents 	map[string]*list.List
+	clients			map[string]*Client
+	msgChannel  	chan *message
+	srvcChannel 	chan *message
+	quit			chan bool
+	quitting		bool
+	
+	identsLock, clientsLock sync.RWMutex
 }
 
-type Client struct {
-	Identity string
-	Conn     *socketio.Conn
-}
-
-type DispatchReq struct {
-	msg    *message
-	result chan interface{}
-}
 
 func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 	s = &ServerHandler{
 		Sio:         sio,
+		
 		subs:        make(map[string]*list.List),
+		idents:		 make(map[string]*list.List),
+		clients:	 make(map[string]*Client),
 		msgChannel:  make(chan *message),
-		srvcChannel: make(chan *message),
+		srvcChannel: make(chan *message),	
+		quit: 		 make(chan bool, 1),
+		quitting:	 false,
 	}
 	s.startDispatcher()
 
 	return s
 }
 
+// When a new user connects, associate their connection
+// with an id -> Client object
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 	Debugln("New connection:", c)
+	
+	s.clientsLock.Lock()
+	s.clients[c.String()] = &Client{Conn: c}
+	s.clientsLock.Unlock()
 }
 
+// When a client disconnected, remove their Client
+// object reference
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	Debugln("Client Disconnected:", c)
+
+	s.clientsLock.Lock()
+	s.clients[c.String()] = nil
+	s.clientsLock.Unlock()
 }
 
 // When a raw message comes in from a connected client, we need
 // to parse it and determine what kind it is and how to route it.
 func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
+	
+	if s.quitting { return }
+	
 	Debugln("Incoming message from client:", c.String())
 
 	// first try to see if the data is recognized as valid JSON
@@ -77,7 +95,23 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 		return
 	}
 	msg.raw = raw
+	
+	s.clientsLock.RLock()
+	client := s.clients[c.String()]
 
+	if client != nil && !client.HasInit() {
+		if msg.Type == "command" && msg.Data["command"] == "init" {
+			//yay. we want an init command here
+		} else {
+			errMsg := NewErrorMessage("Client has not sent init command yet!")
+			Debugln(errMsg)
+			c.Send(errMsg)
+			s.clientsLock.RUnlock()
+			return
+		}
+	}
+	s.clientsLock.RUnlock()
+	
 	switch msg.Type {
 
 	case "command":
@@ -181,10 +215,51 @@ func (s *ServerHandler) unsubscribeCmd(c *socketio.Conn, msg *message) (err os.E
 
 func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	Debugln("initCmd():", c, msg.raw)
-
+	
+	s.clientsLock.Lock()
+	defer s.clientsLock.Unlock()
+	
+	client := s.clients[c.String()]
+	
+	if client.HasInit() { return }
+	
+	if msg.Identity != "" {
+		client.Identity = msg.Identity
+		
+		s.identsLock.Lock()
+		idents := s.idents[client.Identity]
+		if idents == nil { 
+			idents = list.New()
+			s.idents[client.Identity] = idents
+		}
+		idents.PushBack(client)
+		
+		s.identsLock.Unlock()
+	}
+	
+	channels := msg.Data["channels"]
+	if channels != nil {
+		for _, channel := range channels.([]string) {
+			cmdMsg := NewCommand()
+			cmdMsg.Channel = channel
+			s.subscribeCmd(c, cmdMsg)
+		}
+	}
+	
+	client.SetInit(true)
+	
 	return
 }
 
+
+func (s *ServerHandler) Shutdown() {
+	s.quitting = true
+	// if we are in debug mode, just shutdown right away
+	if !CONFIG.DEBUG { time.Sleep(5e9) }
+	close(s.srvcChannel)
+	close(s.msgChannel)
+	<- s.quit
+}
 
 // A goroutine that coordinates the internal message
 // routing. Delivers messages to all members of the
@@ -200,7 +275,7 @@ func (s *ServerHandler) startDispatcher() {
 			ok                 bool
 			typ                string
 			elem               *list.Element
-			client, clientTest Client
+			client, clientTest *Client
 
 			members  = list.New()
 			toRemove = list.New()
@@ -209,13 +284,14 @@ func (s *ServerHandler) startDispatcher() {
 		for {
 
 			select {
-
+			
 			// Service messages include subscribe/unsubscribe
 			// commands and are checked on a seperate channel
 			// from messages so that their queue doest get 
 			// flooded
 			case msg, ok = <-s.srvcChannel:
 				if !ok {
+					s.quit <- true
 					return
 				}
 				if msg.Channel == "" {
@@ -234,10 +310,13 @@ func (s *ServerHandler) startDispatcher() {
 
 				// add this member to the given channel
 				case "subscribe":
-					client = Client{msg.Identity, msg.conn}
-
+					
+					s.clientsLock.RLock()
+					client = s.clients[msg.conn.String()]
+					s.clientsLock.RUnlock()
+					
 					for e := members.Front(); e != nil; e = e.Next() {
-						clientTest = e.Value.(Client)
+						clientTest = e.Value.(*Client)
 						if clientTest.Conn == client.Conn {
 							err := os.NewError("client already subscribed to channel")
 							Debugln(err)
@@ -258,7 +337,7 @@ func (s *ServerHandler) startDispatcher() {
 				case "unsubscribe":
 					ok = false
 					for e := members.Front(); e != nil; e = e.Next() {
-						client = e.Value.(Client)
+						client = e.Value.(*Client)
 						if client.Conn == msg.conn {
 							elem = e.Prev()
 							members.Remove(e)
@@ -286,6 +365,7 @@ func (s *ServerHandler) startDispatcher() {
 			// subscribed to the same channel
 			case msg, ok = <-s.msgChannel:
 				if !ok {
+					s.quit <- true
 					return
 				}
 				if msg.Channel == "" {
@@ -303,7 +383,7 @@ func (s *ServerHandler) startDispatcher() {
 
 				for e := members.Front(); e != nil; e = e.Next() {
 
-					client = e.Value.(Client)
+					client = e.Value.(*Client)
 					if client.Conn.Send(msg) != nil {
 						// getting an error here most likely means
 						// that the client disconnected. we should not
@@ -325,3 +405,31 @@ func (s *ServerHandler) startDispatcher() {
 		}
 	}()
 }
+
+
+
+type Client struct {
+	Identity string
+	Conn     *socketio.Conn
+	hasInit	bool
+	lock	sync.RWMutex
+}
+
+func (c *Client) HasInit() bool {
+	c.lock.RLock()
+	init := c.hasInit
+	c.lock.RUnlock()
+	return init
+}
+
+func (c *Client) SetInit(val bool) {
+	c.lock.Lock()
+	c.hasInit = val
+	c.lock.Unlock()
+}
+
+type DispatchReq struct {
+	msg    *message
+	result chan interface{}
+}
+

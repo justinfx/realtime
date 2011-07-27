@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"os"
+	"os/signal"
 	"path/filepath"
 	
 	// 3rd party
@@ -24,7 +25,6 @@ var (
 	CONFIG *Config
 	ROOT   string
 )
-
 const (
 	CONF_NAME = "realtime.conf"
 )
@@ -144,7 +144,7 @@ func main() {
 	//rd		:= rdc.NewRedisDatabase(rdc.Configuration{})
 	handler := NewServerHandler(sio)
 
-	//sio.OnConnect(func(c *socketio.Conn){handler.OnConnect(c)})
+	sio.OnConnect(func(c *socketio.Conn){handler.OnConnect(c)})
 	sio.OnDisconnect(func(c *socketio.Conn) { handler.OnDisconnect(c) })
 	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) { handler.OnMessage(c, msg) })
 
@@ -161,10 +161,26 @@ func main() {
 	mux := sio.ServeMux()
 	// this is temporary
 	mux.Handle("/", http.FileServer("static/", "/"))
-
+	
+	// start a signal handler
+	go func() {
+		for sig := range signal.Incoming {
+			switch sig.(os.UnixSignal) {
+			case os.SIGTERM, os.SIGINT:
+				log.Println("Waiting a few seconds to clear messages before shutting down.")
+				handler.Shutdown()
+				os.Exit(0)
+			}
+		}
+	}()
+	
+	// start server
 	if err := http.ListenAndServe(fmt.Sprintf(":%v", CONFIG.PORT), mux); err != nil {
 		log.Fatal("ListenAndServe:", err)
+		os.Exit(2)
 	}
+	
+	os.Exit(0)
 
 }
 
