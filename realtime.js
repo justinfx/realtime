@@ -68,7 +68,29 @@ var RT = {
 	wait for onInit
 	
 	******************************************************************/
+	
 	connect : function(identity,options,callback) {
+		var connected = this._connect(identity,options,callback);
+		
+		// create init message
+        var init = {
+        	type : "command",
+			identity : identity,
+			data : {
+				command : "init",
+				options : {
+					channels : this.getSavedChannles()
+				}	
+			}
+        }
+        
+        // pass init to server
+        this.socket.send(init);
+        this.debug("init: ",init);
+		
+	},
+	
+	_connect : function(identity,options,callback) {
 		// create new socketIO Object
 		this.socket = new io.Socket(
 			(options && options.realtime_server) || this.options.realtime_server, {
@@ -87,32 +109,12 @@ var RT = {
         
         // save identity
         this.saveIdentity(identity);
-        
-        this.debug("Connected: ",this);
         this.debug("savedChannels: ",this.getSavedChannles());
         
         // if callback was passed
-        this.socket.addEvent('connect',function() {
-        		
-			// create init message
-	        var init = {
-	        	type : "command",
-				identity : identity,
-				data : {
-					command : "init",
-					options : {
-						channels : this.getSavedChannles()
-					}	
-				}
-	        }
-	        
-	        // pass init to server
-	        this.socket.send(init);
-	        this.debug("init: ",init);
-	        
-	        if(callback) callback();
-    		
-    	});
+        if(callback) {
+        	this.socket.addEvent('connect',callback);
+        }
         
         /******************************************************************
 		SocketIO.addEvent('message')
