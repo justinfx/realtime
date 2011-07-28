@@ -1,3 +1,12 @@
+/*
+	Message
+
+	Realtime-specific message structure.
+	Raw socket.io messages are conformed into this
+	for internal use and then passing back to the
+	client.
+*/
+
 package main
 
 import (
@@ -14,14 +23,6 @@ const (
 )
 
 
-/*
-	Message
-
-	Realtime-specific message structure.
-	Raw socket.io messages are conformed into this
-	for internal use and then passing back to the
-	client.
-*/
 type message struct {
 	Type      string                 "type"
 	Channel   string                 "channel"
