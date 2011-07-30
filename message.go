@@ -12,7 +12,7 @@ package main
 import (
 	"time"
 	"fmt"
-	
+
 	// 3rd party
 	"socketio"
 )
@@ -37,9 +37,9 @@ type message struct {
 	conn  *socketio.Conn
 }
 
-func (m *message) String() (string) {
+func (m *message) String() string {
 	return fmt.Sprintf("message{Type: %v, Channel: \"%v\", Error: \"%v\", Identity: %v, raw: \"%v\"}",
-			m.Type, m.Channel, m.Error, m.Identity, m.raw)
+		m.Type, m.Channel, m.Error, m.Identity, m.raw)
 }
 
 func (m *message) setRaw(data string) {

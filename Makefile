@@ -7,3 +7,7 @@ GOFILES=\
 	realtime.go\
         
 include $(GOROOT)/src/Make.cmd
+
+.PHONY: gofmt
+gofmt:
+	gofmt -w $(GOFILES)

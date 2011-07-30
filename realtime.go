@@ -9,7 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	
+	"http/pprof"
+
 	// 3rd party
 	"socketio"
 	"github.com/kless/goconfig/config"
@@ -21,10 +22,12 @@ import (
 // Set up runtime constants
 //
 
+
 var (
 	CONFIG *Config
 	ROOT   string
 )
+
 const (
 	CONF_NAME = "realtime.conf"
 )
@@ -41,12 +44,12 @@ type Config struct {
 func init() {
 
 	CONFIG = &Config{
-		DEBUG:         true,
+		DEBUG:         false,
 		DOMAINS:       []string{"*"},
 		ALLOWED_TYPES: []string{},
 		PORT:          8001,
 		FLASHPORT:     843,
-		HWM:           15,
+		HWM:           5000,
 	}
 
 	root, _ := filepath.Split(os.Args[0])
@@ -62,6 +65,7 @@ func main() {
 	var domainVal string
 
 	if c, err := getConf(); err == nil {
+
 		if v, e := c.Bool("Server", "debug"); e == nil {
 			CONFIG.DEBUG = v
 		}
@@ -80,7 +84,7 @@ func main() {
 			for i, s := range types {
 				types[i] = strings.TrimSpace(s)
 			}
-			if len(types) != 0 {
+			if len(types) > 0 {
 				CONFIG.ALLOWED_TYPES = types
 			}
 		}
@@ -89,7 +93,7 @@ func main() {
 	fDebug := flag.Bool("debug", false, "Print more feedback from the server")
 	fPort := flag.Int("port", -1, "Start the server on this port (Default 8001)")
 	fDomains := flag.String("domains", "", "Limit client connections to these comma-sep domain origin:port")
-	//flag.IntVar(&(CONFIG.FLASHPORT), "flashport", 843, "Start the flashsocket server on this port (Default 843)")
+
 	flag.Parse()
 
 	if *fDebug {
@@ -110,8 +114,8 @@ func main() {
 		CONFIG.DOMAINS = domains
 	}
 
-	Debugf("Using config options: DEBUG=%v, PORT=%v, FLASHPORT=%v, DOMAINS=%v",
-		CONFIG.DEBUG, CONFIG.PORT, CONFIG.FLASHPORT, CONFIG.DOMAINS)
+	log.Printf("Using config options: DEBUG=%v, PORT=%v, FLASHPORT=%v, DOMAINS=%v, HWM=%v",
+		CONFIG.DEBUG, CONFIG.PORT, CONFIG.FLASHPORT, CONFIG.DOMAINS, CONFIG.HWM)
 
 	// create the socket.io server
 	config := socketio.DefaultConfig
@@ -140,14 +144,27 @@ func main() {
 		}
 	}
 
+
 	sio := socketio.NewSocketIO(&config)
 	//rd		:= rdc.NewRedisDatabase(rdc.Configuration{})
 	handler := NewServerHandler(sio)
 
-	sio.OnConnect(func(c *socketio.Conn){handler.OnConnect(c)})
+	sio.OnConnect(func(c *socketio.Conn) { handler.OnConnect(c) })
 	sio.OnDisconnect(func(c *socketio.Conn) { handler.OnDisconnect(c) })
 	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) { handler.OnMessage(c, msg) })
 
+	// start a signal handler
+	go func() {
+		for sig := range signal.Incoming {
+			switch sig.(os.UnixSignal) {
+			case os.SIGTERM, os.SIGINT:
+				log.Println("Server shutting down.")
+				handler.Shutdown()
+				os.Exit(0)
+			}
+		}
+	}()
+	
 	// start the flash server
 	go func() {
 		if err := sio.ListenAndServeFlashPolicy(fmt.Sprintf(":%v", CONFIG.FLASHPORT)); err != nil {
@@ -155,31 +172,25 @@ func main() {
 		}
 	}()
 
-	log.Printf("Server starting. Tune your browser to http://localhost:%v/", CONFIG.PORT)
 
 	// mux and server
 	mux := sio.ServeMux()
 	// this is temporary
 	mux.Handle("/", http.FileServer("static/", "/"))
-	
-	// start a signal handler
-	go func() {
-		for sig := range signal.Incoming {
-			switch sig.(os.UnixSignal) {
-			case os.SIGTERM, os.SIGINT:
-				log.Println("Waiting a few seconds to clear messages before shutting down.")
-				handler.Shutdown()
-				os.Exit(0)
-			}
-		}
-	}()
-	
+
+	mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	mux.Handle("/debug/pprof/heap", http.HandlerFunc(pprof.Heap))
+	mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+
 	// start server
+	log.Printf("RealTime server starting. Accepting connections on port %v/", CONFIG.PORT)
+
 	if err := http.ListenAndServe(fmt.Sprintf(":%v", CONFIG.PORT), mux); err != nil {
 		log.Fatal("ListenAndServe:", err)
 		os.Exit(2)
 	}
-	
+
 	os.Exit(0)
 
 }
