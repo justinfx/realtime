@@ -40,7 +40,7 @@
 				$("body").prepend("<div class='announce'><div>"+res.data.msg+"</div></div>");
 			},
 			onSubscribe : function(res) {
-				$("#chat").append("<div> user "+res.identity+" has connected to global </div>");
+				$("#chat").append("<div> user has connected to global </div>");
 			}
 		});
 		
@@ -48,32 +48,36 @@
 		RT.createChannel("chat_advanced",{
 			onReceive : function(res) {
 				isTyping = 0;
-				doneTyping(res.identity);
+				//doneTyping(res.identity);
 				// we could make msg be an object and have a type
 				// but were just gonna say if the first 4 is 'data' its an image
 				if(res.data.msg.substring(0,4) == "data") {
 					$("#chat").append("<div><img src='" + res.data.msg + "'/></div>");
 				} else {
 					//$("#chat").append("<div>"+res.identity+"["+res.timestamp+"] : " + res.data.msg + "</div>");
-					$("#chat").append("<div><b>"+res.identity+"</b>" + res.data.msg + "</div>");
+					$("#chat").append("<div>" + res.data.msg + "</div>");
 				}
 				// always scroll to bottom
 				$("#chat")[0].scrollTop = $("#chat")[0].scrollHeight;
 			},
 			onSubscribe : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has subscribed</div>");
+				$("#chat").append("<div>["+res.timestamp+"] :  user has subscribed</div>");
+			},
+			onUnsubscribe : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  user has UNsubscribed</div>");
 			},
 			onConnect : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has connected</div>");
+				$("#chat").append("<div>["+res.timestamp+"] :  user has connected</div>");
 			},
 			onDisconnect : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has disconnected</div>");
+				$("#chat").append("<div>["+res.timestamp+"] :  user has disconnected</div>");
 			},
 			onError : function(res) {
 				RT.debug("error: ",res);
 			},
 			
 			// custom methods
+			/*
 			onTyping : function(res) {
 				if(res.identity) {
 					$("#"+res.identity).remove();
@@ -83,11 +87,12 @@
 			doneTyping : function(res) {
 				doneTyping(res.identity);
 			},
+			*/
 			onFocus : function(res) {
-				$("#chat").append("<div>"+res.identity+" has focused the window</div>");
+				$("#chat").append("<div> has focused the window</div>");
 			},
 			onBlur : function(res) {
-				$("#chat").append("<div>"+res.identity+" is doing something else</div>");
+				$("#chat").append("<div> is doing something else</div>");
 			}
 		});
 
@@ -98,7 +103,7 @@
         //send the message when submit is clicked
         $('#chatform').submit(function () {
         	// call done typing
-			doneTyping(RT.identity);
+			//doneTyping(RT.identity);
 			if($("#chatText").val()) {
         		RT.publish("chat_advanced",$("#chatText").val());
 				$("#chatText").val("");
@@ -129,6 +134,11 @@
      		}
      	});
      	
+     	$(".unsub").click(function() {
+     		RT.unsubscribe("chat");
+     		return false;
+     	});
+     	
      	// we can track weather they user is looking at the chat or not
      	$(window).focus(function() {
      		RT.triggerEvent("chat_advanced","onFocus",{},true);
@@ -136,6 +146,7 @@
      		RT.triggerEvent("chat_advanced","onBlur",{},true);
      	});
 		
+		/*
 		var typingTimer;
 		var isTyping = 0;
 		$("#chatText").keydown(function(e) {
@@ -156,15 +167,18 @@
 				},2000);
 			}	
 		});
+		*/
      	
     });
     
+    /*
     function doneTyping(who) {
     	if(who) {
     		isTyping = 0;
     		$("#"+who).remove();
     	}	
     }
+    */
 
 </script>
 </head>
@@ -175,6 +189,7 @@
 <form id="chatform">
 <input type="text" id="chatText"/>
 <input type="submit" />
+<input type="button" class="unsub" value="unsub"/>
 </form>
 
 <br><br><br>
