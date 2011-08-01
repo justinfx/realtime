@@ -17,7 +17,7 @@ import (
 	"fmt"
 
 	// 3rd party
-	"socketio"
+	"github.com/justinfx/go-socket.io"
 	//"tideland-rdc.googlecode.com/hg"
 )
 

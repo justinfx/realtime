@@ -12,7 +12,7 @@ import (
 	"http/pprof"
 
 	// 3rd party
-	"socketio"
+	"github.com/justinfx/go-socket.io"
 	"github.com/kless/goconfig/config"
 	//	"tideland-rdc.googlecode.com/hg"
 )
