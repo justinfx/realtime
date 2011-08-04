@@ -124,23 +124,15 @@ $(function() {
 });
 
 // scroll to bottom
-$(function() {
-	$.fn.scrollToBottom = function() {
-		return this.each(function() {
-			$(this)[0].scrollTop = $(this)[0].scrollHeight;
-		});
-	};
-});
-
 RT.plugins.scrollToBottom = function(el) {
 	el.scrollTop = el.scrollHeight;
 }
 
+// liveCounter Widget
 RT.plugins.liveCounter = function(ch,el) {
-	var channel = RT.channelMethods[ch];
-	RT.plugin("chat_advanced", function(json) {
-		if(json.type == "command" && json.data.command == "onSubscribe") {
-			el.innerHTML = json.data.count;
+	RT.plugin(ch, function(e) {
+		if(e.type == "command" && e.data.command == "onSubscribe") {
+			el.innerHTML = e.data.count;
 		}
 	})
 }

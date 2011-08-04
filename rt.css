@@ -107,12 +107,40 @@ background: linear-gradient(top, rgba(229,112,231,1) 0%,rgba(200,94,199,1) 47%,r
 
 
 .liveCounter {
-	width:100px;
+	width:85px;
 	height:50px;
 	background:#333;
 	color:white;
 	font-size:36px;
 	padding:10px;
 	margin:20px;
+	font-family:helvetica;
+	text-align:center;
+	
+	background: rgb(69,72,77); /* Old browsers */
+	background: -moz-linear-gradient(top, rgba(69,72,77,1) 0%, rgba(0,0,0,1) 100%); /* FF3.6+ */
+	background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(69,72,77,1)), color-stop(100%,rgba(0,0,0,1))); /* Chrome,Safari4+ */
+	background: -webkit-linear-gradient(top, rgba(69,72,77,1) 0%,rgba(0,0,0,1) 100%); /* Chrome10+,Safari5.1+ */
+	background: -o-linear-gradient(top, rgba(69,72,77,1) 0%,rgba(0,0,0,1) 100%); /* Opera11.10+ */
+	background: -ms-linear-gradient(top, rgba(69,72,77,1) 0%,rgba(0,0,0,1) 100%); /* IE10+ */
+	filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#45484d', endColorstr='#000000',GradientType=0 ); /* IE6-9 */
+	background: linear-gradient(top, rgba(69,72,77,1) 0%,rgba(0,0,0,1) 100%); /* W3C */
+	
+	-webkit-border-radius:4px;
+	-moz-border-radius:4px;
+	border-radius:4px;
+	
+	-webkit-box-shadow:2px 2px 8px #333;
+	-moz-box-shadow:2px 2px 8px #333;
+	box-shadow:2px 2px 8px #333;
+	
+	-webkit-text-shadow:0px -2px 2px #000;
+	-moz-text-shadow:0px -2px 2px #000;
+	text-shadow:0px -2px 2px #000;
+	
+}
+
+.liveCounter .counterText {
+	font-size:11px;
 }
 	

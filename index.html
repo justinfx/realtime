@@ -2,32 +2,19 @@
 <html>
 <head>
   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
-  <script src="http://cdn.socket.io/stable/socket.io.js"></script>
   <script src="realtime.js"></script>
   <script src="plugins.js"></script>
   <link rel="stylesheet" type="text/css" href="rt.css"/>
-  <style type="text/css">
-  	.announce {
-  		width:100%;
-  		background:#333;
-  	}
-  	.announce div {
-  		padding:10px;
-  		color:#ccc;
-  		font-size:14px;
-  		font-family:arial;
-  	}
-  </style>
   <script type="text/javascript">
     $(function() {
-		
-		
-		
+
 		RT.debugging = true;
 
 		// connect with identity
-		RT.connect("test",{},function() {
-			RT.plugins.liveCounter("chat_advanced",$(".liveCounter")[0]);
+		RT.connect("",{},function() {
+			RT.plugins.liveCounter("chat_advanced",$(".counterNumber")[0]);
+			// once connected subscrube
+    		RT.subscribe("chat_advanced");
 		});
 		
 		RT.createChannel("chat_advanced",{
@@ -83,9 +70,6 @@
 			},
 			*/
 		});
-
-		// on page load, connect to global
-    	RT.subscribe("chat_advanced");
 		
         //send the message when submit is clicked
         $('#chatform').submit(function () {
@@ -158,6 +142,13 @@
 </head>
 <body>
 <h3>Chat!</h3>
+
+<!-- live counter widget -->
+<div class="liveCounter">
+	<div class="counterNumber">0</div>
+	<div class="counterText">Users Online</div>
+</div>
+
 <div id="chat" style="width: 60em; height: 20em; overflow:auto; border: 1px solid black">
 </div>
 <form id="chatform">
@@ -165,7 +156,7 @@
 <input type="submit" />
 <input type="button" class="unsub" value="unsub"/>
 
-<div class="liveCounter">0</div>
+
 </form>
 </body>
 </html>

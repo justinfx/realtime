@@ -65,23 +65,26 @@ var RT = {
 	******************************************************************/
 	
 	connect : function(identity,options,callback) {
-		var connected = this._connect(identity,options,callback);
-		
-		// create init message
-        var init = {
-        	type : "command",
-			identity : identity,
-			data : {
-				command : "init",
-				options : {
-					channels : this.getSavedChannles()
-				}	
-			}
-        }
-        
-        // pass init to server
-        this.socket.send(init);
-        this.debug("init: ",init);
+	
+		loadScript("http://cdn.socket.io/stable/socket.io.js",function() {
+			var connected = RT._connect(identity,options,callback);
+			
+			// create init message
+	        var init = {
+	        	type : "command",
+				identity : identity,
+				data : {
+					command : "init",
+					options : {
+						channels : RT.getSavedChannles()
+					}	
+				}
+	        }
+	        
+	        // pass init to server
+	        RT.socket.send(init);
+	        RT.debug("init: ",init);
+	    });    
 		
 	},
 	
@@ -578,6 +581,29 @@ function inArray (needle, haystack, argStrict) {
     return false;
 }
 
+
+function loadScript(url, callback){
+
+    var script = document.createElement("script")
+    script.type = "text/javascript";
+
+    if (script.readyState){  //IE
+        script.onreadystatechange = function(){
+            if (script.readyState == "loaded" ||
+                    script.readyState == "complete"){
+                script.onreadystatechange = null;
+                callback();
+            }
+        };
+    } else {  //Others
+        script.onload = function(){
+            callback();
+        };
+    }
+
+    script.src = url;
+    document.getElementsByTagName("head")[0].appendChild(script);
+}
 /*
  * Date Format 1.2.3
  * (c) 2007-2009 Steven Levithan <stevenlevithan.com>
