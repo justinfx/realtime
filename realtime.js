@@ -7,7 +7,6 @@ DEPENDENCIES
 socketIO required
 http://cdn.socket.io/stable/socket.io.js
 WEB_SOCKET_SWF_LOCATION = 'http://cdn.socket.io/stable/WebSocketMain.swf'
-And the entire python + Tornado + ZeroMQ server
 
 Normal Procedure:
 
@@ -22,24 +21,14 @@ Normal Procedure:
 
 ******************************************************************/
 
-// constnat
-
-
-// get socketio
-/*
-var head= document.getElementsByTagName('head')[0];
-var script= document.createElement('script');
-script.type= 'text/javascript';
-script.src= 'http://cdn.socket.io/stable/socket.io.js';
-head.appendChild(script);
-*/
-
 var RT = {
 	
 	debugging:false,				// turn debugging on or off
+	plugins:{},
 	socket : null,				// the socketIO object
 	channelMethods : {},		// each channel has its own object
 	identity: null,
+	notifyOpen : false,
 	options : {
 		strip : false,			// regex to be replaced by blank
 		htmlEntities : true,	// turn > and < into &lt; and &gt;
@@ -49,7 +38,13 @@ var RT = {
 		resource:"realtime",
 		channelsCookie : "realTime_channels",
 		identityCookie : "realTime_identity",
-		realtime_server : window.location.hostname
+		server : "localhost",
+		notifyOptions : {
+			theme : "",
+			duration : 2000,
+			position : "bottomright",
+			animate : "fade"
+		}
 	},
 	
 	
@@ -93,7 +88,7 @@ var RT = {
 	_connect : function(identity,options,callback) {
 		// create new socketIO Object
 		this.socket = new io.Socket(
-			(options && options.realtime_server) || this.options.realtime_server, {
+			(options && options.server) || this.options.server, {
         		port: (options && options.port) || this.options.port, 
         		rememberTransport: false,
         		resource: (options && options.resource) || this.options.resource
@@ -104,7 +99,17 @@ var RT = {
         
         // extend options
 		for(i in options) {
-			this.options[i] = options[i];
+			// extend 1 level of objects
+			if(typeof options[i] == "object") {
+				for(j in options[i]) this.options[i][j] = options[i][j];
+			} else {
+				this.options[i] = options[i];
+			}	
+		}
+		
+		// play with some options
+		if(this.options.stripHTML) {
+			this.options.strip = /<[^>]*>/gi;
 		}
         
         // save identity
@@ -112,9 +117,10 @@ var RT = {
         this.debug("savedChannels: ",this.getSavedChannles());
         
         // if callback was passed
-        if(callback) {
-        	this.socket.addEvent('connect',callback);
-        }
+        
+        this.socket.addEvent('connect',function() {
+        	if(callback) callback();
+        });
         
         /******************************************************************
 		SocketIO.addEvent('message')
@@ -191,6 +197,7 @@ var RT = {
 									identity : json.identity,
 									timestamp : json.timestamp
 								});
+								
 								RT.debug("Command: ["+channel+"]["+json.data.command+"]",json);
 							}	
 						}
@@ -482,8 +489,32 @@ var RT = {
 		} else {
 			return timestamp;
 		}	
-	}
+	},
 	
+	/******************************************************************
+	Method: plugin
+	Input:	channel [String]
+	Input: 	callback [Function]
+	Output:	None
+	
+	Will add a new listener for the event in the plugin. This is different
+	than channel methods, because those methods are all unique and exist
+	in the instantiation of the object.  These plugin methods exist elsewhere
+	and should not interfere with whats going on
+	******************************************************************/
+	plugin : function(channel, callback) {
+		this.socket.addEvent('message', function(json) {
+		
+			if(typeof(json) != "object") json = JSON.parse(json);
+        	RT.debug("Plugin Method on ["+channel+"]: ",json);
+			
+			if(json.channel == channel) {
+				// fix the timestamp
+				json.timestamp = RT.formatDate(json.timestamp);
+				callback(json);
+			}
+		})
+	}
 }
 
 /******************************************************************

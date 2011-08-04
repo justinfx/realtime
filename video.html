@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="http://cdn.socket.io/stable/socket.io.js"></script>
+  <script src="realtime.js"></script>
+  <script src="plugins.js"></script>
+  <script src="video.js"></script>
+  <link rel="stylesheet" type="text/css" href="rt.css"/>
+  <style type="text/css">
+  
+  </style>
+  <script type="text/javascript">
+	RT.connect();
+	RT.subscribe("video");
+	
+	
+	$(function() {
+ 		RT.debugging = false;
+ 		RT.connect();
+ 		
+ 		$("video").bind("play",function() {
+ 			RT.publish("video",{action : "play"});
+ 		});
+ 		
+ 		$("video").bind("pause",function() {
+ 			RT.publish("video",{action : "pause"});
+ 		});
+ 		
+ 		$("video").bind("seeking",function(e) {
+ 			RT.publish("video",{
+ 				action : "seek",
+ 				time : $("video")[0].currentTime
+ 			});
+ 		});
+
+	});	
+	
+  </script>
+ </head>
+ <body>
+ 	<video id="video" width="300" height="120" controls>
+	<source src="http://clips.vorwaerts-gmbh.de/VfE_html5.mp4" type="video/mp4"><!-- Safari / iOS, IE9 -->
+	<source src="http://clips.vorwaerts-gmbh.de/VfE.webm" type="video/webm"><!-- Chrome10+, Ffx4+, Opera10.6+ -->
+	<source src="http://clips.vorwaerts-gmbh.de/VfE.ogv" type="video/ogg"><!-- Firefox3.6+ / Opera 10.5+ -->
+</video>
+ </body> 
