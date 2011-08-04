@@ -61,14 +61,13 @@ func BenchmarkRealtime(b *testing.B) {
 	}
 
 	b.StartTimer()
-	
+
 	/*
-	initCommand := `{"type":"command", "data":{"command":"init"}}`
-	subCommand := `{"type":"command","channel":"chat","data":{"command":"subscribe"}}`
-	msgCommand := `{"type":"message","channel":"chat","data":{"msg":"` + strings.Repeat("X", (msg_size-53)) + `"}}`
+		initCommand := `{"type":"command", "data":{"command":"init"}}`
+		subCommand := `{"type":"command","channel":"chat","data":{"command":"subscribe"}}`
+		msgCommand := `{"type":"message","channel":"chat","data":{"msg":"` + strings.Repeat("X", (msg_size-53)) + `"}}`
 	*/
 
-		
 	for i := 0; i < clients; i++ {
 		go func() {
 			clientMessage := make(chan socketio.Message)
@@ -89,15 +88,15 @@ func BenchmarkRealtime(b *testing.B) {
 
 			initCommand := NewCommand()
 			initCommand.Data["command"] = "init"
-		
+
 			subCommand := NewCommand()
 			subCommand.Channel = "chat"
 			subCommand.Data["command"] = "subscribe"
-			
+
 			msgCommand := NewMessage()
 			msgCommand.Channel = "chat"
-			msgCommand.Data["msg"] = strings.Repeat("X", (msg_size-53))
-	
+			msgCommand.Data["msg"] = strings.Repeat("X", (msg_size - 53))
+
 			if err = client.Send(initCommand); err != nil {
 				log.Fatal("Send init:", err)
 			}
@@ -109,11 +108,11 @@ func BenchmarkRealtime(b *testing.B) {
 			iook := make(chan bool)
 
 			go func() {
-				
+
 				log.Printf("Sending %d messages of size %v bytes...", numMessages, msg_size)
 				var err os.Error
 				var msg message
-				
+
 				for i := 0; i < numMessages; i++ {
 					//time.Sleep(0)
 					msg = *msgCommand

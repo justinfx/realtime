@@ -32,12 +32,12 @@ func init() {
 // Returns a new Config object
 func getConf() (*config.Config, os.Error) {
 	p1 := filepath.Join(ROOT, CONF_NAME)
-	
+
 	parent, _ := filepath.Split(ROOT)
 	p2 := filepath.Join(parent, "etc", CONF_NAME)
-	
+
 	p3 := filepath.Join(ROOT, "etc", CONF_NAME)
-	
+
 	for _, p := range []string{p1, p2, p3} {
 		if fileExists(p) {
 			if c, err := config.ReadDefault(p); err != nil {
@@ -61,12 +61,12 @@ type License []string
 // license keys
 func NewLicense() (license License, err os.Error) {
 	lic := "license.txt"
-	
+
 	p1 := filepath.Join(ROOT, lic)
-	
+
 	parent, _ := filepath.Split(ROOT)
 	p2 := filepath.Join(parent, "etc", lic)
-	
+
 	p3 := filepath.Join(ROOT, "etc", lic)
 
 	var (
@@ -97,10 +97,10 @@ func NewLicense() (license License, err os.Error) {
 					err = nil
 					break
 				}
-				if len(line) == 0 || bytes.IndexAny(line, "#/;") > -1 { 
-					continue 
+				if len(line) == 0 || bytes.IndexAny(line, "#/;") > -1 {
+					continue
 				}
-				
+
 				buffer.WriteString(string(line))
 				if prefix {
 					continue
@@ -131,13 +131,13 @@ func (l License) IsValid(lic string) bool {
 
 func (l License) CheckHttpRequest(req *http.Request) bool {
 	var (
-		url *http.URL
-		err os.Error
+		url          *http.URL
+		err          os.Error
 		origin, host string
 	)
-	
+
 	origin = req.Header.Get("Origin")
-	
+
 	if origin != "" {
 		url, err = http.ParseURL(origin)
 		if err == nil && url.Host != "" {
@@ -153,10 +153,10 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 	} else if origin == "" {
 		origin = host
 	}
-	
+
 	hash := sha1.New()
 	hash.Write([]byte(origin))
 	hash.Write(PADDING)
 	return l.IsValid(fmt.Sprintf("%x", hash.Sum()))
-	
+
 }

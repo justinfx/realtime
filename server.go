@@ -8,7 +8,6 @@ package main
 */
 
 
-
 import (
 	"os"
 	"container/list"
@@ -17,9 +16,9 @@ import (
 	"fmt"
 
 	// 3rd party
-	//"github.com/justinfx/go-socket.io"
+	"github.com/justinfx/go-socket.io"
 	//"github.com/madari/go-socket.io"
-	"socketio" // dev only
+	//"socketio" // dev only
 )
 
 
@@ -61,7 +60,7 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 // with an id -> Client object
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 	//Debugln("New connection:", c)
-	
+
 	s.clientsLock.Lock()
 	s.clients[c.String()] = &Client{Conn: c}
 	s.clientsLock.Unlock()
@@ -75,9 +74,9 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	s.clientsLock.Lock()
 	client := s.clients[c.String()]
 	s.clientsLock.Unlock()
-	
+
 	msgs := []*message{}
-	
+
 	client.lock.RLock()
 	for e := client.Channels.Front(); e != nil; e = e.Next() {
 		msg := NewCommand()
@@ -87,11 +86,11 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 		msgs = append(msgs, msg)
 	}
 	client.lock.RUnlock()
-	
+
 	for _, m := range msgs {
 		s.unsubscribeCmd(c, m)
 	}
-	
+
 	s.clientsLock.Lock()
 	s.clients[c.String()] = nil, false
 	s.clientsLock.Unlock()
@@ -260,21 +259,21 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	if client.HasInit() {
 		return
 	}
-	
+
 	/*
-	if msg.Identity != "" {
-		client.Identity = msg.Identity
+		if msg.Identity != "" {
+			client.Identity = msg.Identity
 
-		s.identsLock.Lock()
-		idents := s.idents[client.Identity]
-		if idents == nil {
-			idents = list.New()
-			s.idents[client.Identity] = idents
+			s.identsLock.Lock()
+			idents := s.idents[client.Identity]
+			if idents == nil {
+				idents = list.New()
+				s.idents[client.Identity] = idents
+			}
+			idents.PushBack(client)
+
+			s.identsLock.Unlock()
 		}
-		idents.PushBack(client)
-
-		s.identsLock.Unlock()
-	}
 	*/
 	channels := msg.Data["channels"]
 	if channels != nil {
@@ -295,9 +294,9 @@ func (s *ServerHandler) Shutdown() {
 	s.quitting = true
 	// if we are in debug mode, just shutdown right away
 	/*
-	if !CONFIG.DEBUG {
-		time.Sleep(5e9)
-	}
+		if !CONFIG.DEBUG {
+			time.Sleep(5e9)
+		}
 	*/
 	close(s.srvcChannel)
 	close(s.msgChannel)
@@ -375,11 +374,11 @@ func (s *ServerHandler) startDispatcher() {
 					reply.Data["count"] = members.Len()
 
 					s.publish(reply)
-					
+
 					client.lock.Lock()
 					client.Channels.PushBack(msg.Channel)
 					client.lock.Unlock()
-					
+
 					Debugf("startDispatcher(): subscribed %v => \"%v\"", client, msg.Channel)
 
 				// remove this member from the given channel
@@ -414,7 +413,7 @@ func (s *ServerHandler) startDispatcher() {
 							}
 						}
 						client.lock.Unlock()
-					
+
 					} else {
 						err := os.NewError("client was not subscribed to channel")
 						Debugln(err)

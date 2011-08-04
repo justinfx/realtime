@@ -11,9 +11,9 @@ import (
 	"http/pprof"
 
 	// 3rd party
-	//"github.com/justinfx/go-socket.io"
+	"github.com/justinfx/go-socket.io"
 	//"github.com/madari/go-socket.io"
-	"socketio" // dev only
+	//"socketio" // dev only
 )
 
 //
@@ -101,7 +101,6 @@ func main() {
 	if *fPort > 0 {
 		CONFIG.PORT = *fPort
 	}
-
 
 	log.Printf("Using config options: DEBUG=%v, PORT=%v, HWM=%v",
 		CONFIG.DEBUG, CONFIG.PORT, CONFIG.HWM)
