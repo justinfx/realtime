@@ -1,3 +1,5 @@
+package main
+
 /*
 	Server
 
@@ -5,26 +7,24 @@
 	and handles all communications between connected clients.
 */
 
-package main
 
 
 import (
 	"os"
 	"container/list"
 	"json"
-	"time"
 	"sync"
 	"fmt"
 
 	// 3rd party
-	"github.com/justinfx/go-socket.io"
-	//"tideland-rdc.googlecode.com/hg"
+	//"github.com/justinfx/go-socket.io"
+	//"github.com/madari/go-socket.io"
+	"socketio" // dev only
 )
 
 
 type ServerHandler struct {
 	Sio *socketio.SocketIO
-	//db	*rdc.RedisDatabase
 
 	subs, idents map[string]*list.List
 	clients      map[string]*Client
@@ -61,7 +61,7 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 // with an id -> Client object
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 	//Debugln("New connection:", c)
-
+	
 	s.clientsLock.Lock()
 	s.clients[c.String()] = &Client{Conn: c}
 	s.clientsLock.Unlock()
@@ -72,6 +72,26 @@ func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	//Debugln("Client Disconnected:", c)
 
+	s.clientsLock.Lock()
+	client := s.clients[c.String()]
+	s.clientsLock.Unlock()
+	
+	msgs := []*message{}
+	
+	client.lock.RLock()
+	for e := client.Channels.Front(); e != nil; e = e.Next() {
+		msg := NewCommand()
+		msg.Channel = e.Value.(string)
+		msg.Data["command"] = "unsubscribe"
+		msg.Identity = client.Identity
+		msgs = append(msgs, msg)
+	}
+	client.lock.RUnlock()
+	
+	for _, m := range msgs {
+		s.unsubscribeCmd(c, m)
+	}
+	
 	s.clientsLock.Lock()
 	s.clients[c.String()] = nil, false
 	s.clientsLock.Unlock()
@@ -240,7 +260,8 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	if client.HasInit() {
 		return
 	}
-
+	
+	/*
 	if msg.Identity != "" {
 		client.Identity = msg.Identity
 
@@ -254,7 +275,7 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 
 		s.identsLock.Unlock()
 	}
-
+	*/
 	channels := msg.Data["channels"]
 	if channels != nil {
 		for _, channel := range channels.([]string) {
@@ -273,9 +294,11 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 func (s *ServerHandler) Shutdown() {
 	s.quitting = true
 	// if we are in debug mode, just shutdown right away
+	/*
 	if !CONFIG.DEBUG {
 		time.Sleep(5e9)
 	}
+	*/
 	close(s.srvcChannel)
 	close(s.msgChannel)
 	<-s.quit
@@ -346,15 +369,22 @@ func (s *ServerHandler) startDispatcher() {
 					_ = members.PushBack(client)
 
 					reply = NewCommand()
+					reply.Channel = msg.Channel
 					reply.Data["command"] = "onSubscribe"
 					reply.Data["options"] = msg.Data["options"]
+					reply.Data["count"] = members.Len()
 
 					s.publish(reply)
-
+					
+					client.lock.Lock()
+					client.Channels.PushBack(msg.Channel)
+					client.lock.Unlock()
+					
 					Debugf("startDispatcher(): subscribed %v => \"%v\"", client, msg.Channel)
 
 				// remove this member from the given channel
 				case "unsubscribe":
+					client = nil
 					ok = false
 					for e := members.Front(); e != nil; e = e.Next() {
 						client = e.Value.(*Client)
@@ -369,10 +399,22 @@ func (s *ServerHandler) startDispatcher() {
 					}
 					if ok {
 						reply = NewCommand()
+						reply.Channel = msg.Channel
 						reply.Data["command"] = "onUnsubscribe"
 						reply.Data["options"] = msg.Data["options"]
+						reply.Data["count"] = members.Len()
 
 						s.publish(reply)
+
+						client.lock.Lock()
+						for e := client.Channels.Front(); e != nil; e = e.Next() {
+							if msg.Channel == e.Value.(string) {
+								client.Channels.Remove(e)
+								break
+							}
+						}
+						client.lock.Unlock()
+					
 					} else {
 						err := os.NewError("client was not subscribed to channel")
 						Debugln(err)
@@ -430,6 +472,7 @@ func (s *ServerHandler) startDispatcher() {
 type Client struct {
 	Identity string
 	Conn     *socketio.Conn
+	Channels list.List
 	hasInit  bool
 	lock     sync.RWMutex
 }

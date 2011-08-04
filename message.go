@@ -1,3 +1,5 @@
+package main
+
 /*
 	Message
 
@@ -7,14 +9,15 @@
 	client.
 */
 
-package main
 
 import (
 	"time"
 	"fmt"
 
 	// 3rd party
-	"github.com/justinfx/go-socket.io"
+	//"github.com/justinfx/go-socket.io"
+	//"github.com/madari/go-socket.io"
+	"socketio" // dev only
 )
 
 const (
@@ -24,13 +27,13 @@ const (
 
 
 type message struct {
-	Type      string                 "type"
-	Channel   string                 "channel"
-	Success   bool                   "success"
-	Error     string                 "error"
-	Identity  string                 "identity"
-	Timestamp string                 "timestamp"
-	Data      map[string]interface{} "data" // client-side specific
+	Type      string                 `json:"type"`
+	Channel   string                 `json:"channel"`
+	Success   bool                   `json:"success"`
+	Error     string                 `json:"error"`
+	Identity  string                 `json:"identity"`
+	Timestamp string                 `json:"timestamp"`
+	Data      map[string]interface{} `json:"data"` // client-side specific
 
 	raw   string
 	mtype int

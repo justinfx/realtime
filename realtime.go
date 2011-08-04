@@ -8,15 +8,13 @@ import (
 	"strings"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"http/pprof"
 
 	// 3rd party
-	"github.com/justinfx/go-socket.io"
-	"github.com/kless/goconfig/config"
-	//	"tideland-rdc.googlecode.com/hg"
+	//"github.com/justinfx/go-socket.io"
+	//"github.com/madari/go-socket.io"
+	"socketio" // dev only
 )
-
 
 //
 // Set up runtime constants
@@ -24,8 +22,9 @@ import (
 
 
 var (
-	CONFIG *Config
-	ROOT   string
+	CONFIG  *Config
+	ROOT    string
+	LICENSE License
 )
 
 const (
@@ -52,8 +51,12 @@ func init() {
 		HWM:           5000,
 	}
 
-	root, _ := filepath.Split(os.Args[0])
-	ROOT, _ = filepath.Abs(root)
+	var err os.Error
+	LICENSE, err = NewLicense()
+	if err != nil {
+		fmt.Println("Warning: No valid license keys were found. Only localhost connections are permitted.")
+	}
+
 }
 
 //
@@ -62,7 +65,7 @@ func init() {
 func main() {
 
 	// setup and options
-	var domainVal string
+	//var domainVal string
 
 	if c, err := getConf(); err == nil {
 
@@ -72,15 +75,12 @@ func main() {
 		if v, e := c.Int("Server", "websocket-port"); e == nil {
 			CONFIG.PORT = v
 		}
-		if v, e := c.String("Server", "allowed-domain"); e == nil {
-			domainVal = v
-		}
 		if v, e := c.Int("Messaging", "message-cache-limit"); e == nil {
 			CONFIG.HWM = v
 		}
 
 		if v, e := c.String("Server", "allowed-types"); e == nil && v != "" {
-			types := strings.Split(v, ",", -1)
+			types := strings.Split(v, ",")
 			for i, s := range types {
 				types[i] = strings.TrimSpace(s)
 			}
@@ -92,7 +92,6 @@ func main() {
 
 	fDebug := flag.Bool("debug", false, "Print more feedback from the server")
 	fPort := flag.Int("port", -1, "Start the server on this port (Default 8001)")
-	fDomains := flag.String("domains", "", "Limit client connections to these comma-sep domain origin:port")
 
 	flag.Parse()
 
@@ -102,20 +101,10 @@ func main() {
 	if *fPort > 0 {
 		CONFIG.PORT = *fPort
 	}
-	if *fDomains != "" {
-		domainVal = *fDomains
-	}
 
-	domains := strings.Split(domainVal, ",", -1)
-	for i, s := range domains {
-		domains[i] = strings.TrimSpace(s)
-	}
-	if len(domains) != 0 {
-		CONFIG.DOMAINS = domains
-	}
 
-	log.Printf("Using config options: DEBUG=%v, PORT=%v, FLASHPORT=%v, DOMAINS=%v, HWM=%v",
-		CONFIG.DEBUG, CONFIG.PORT, CONFIG.FLASHPORT, CONFIG.DOMAINS, CONFIG.HWM)
+	log.Printf("Using config options: DEBUG=%v, PORT=%v, HWM=%v",
+		CONFIG.DEBUG, CONFIG.PORT, CONFIG.HWM)
 
 	// create the socket.io server
 	config := socketio.DefaultConfig
@@ -144,14 +133,14 @@ func main() {
 		}
 	}
 
-
 	sio := socketio.NewSocketIO(&config)
-	//rd		:= rdc.NewRedisDatabase(rdc.Configuration{})
+	//rd := rdc.NewRedisDatabase(rdc.Configuration{})
 	handler := NewServerHandler(sio)
 
 	sio.OnConnect(func(c *socketio.Conn) { handler.OnConnect(c) })
 	sio.OnDisconnect(func(c *socketio.Conn) { handler.OnDisconnect(c) })
 	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) { handler.OnMessage(c, msg) })
+	sio.SetAuthorization(func(r *http.Request) bool { return LICENSE.CheckHttpRequest(r) })
 
 	// start a signal handler
 	go func() {
@@ -164,19 +153,18 @@ func main() {
 			}
 		}
 	}()
-	
+
 	// start the flash server
 	go func() {
 		if err := sio.ListenAndServeFlashPolicy(fmt.Sprintf(":%v", CONFIG.FLASHPORT)); err != nil {
-			log.Println(err)
+			log.Println("Warning: Could not start flash policy server", err)
 		}
 	}()
 
-
 	// mux and server
 	mux := sio.ServeMux()
-	// this is temporary
-	mux.Handle("/", http.FileServer("static/", "/"))
+	// this is a temporary static dir for testing
+	mux.Handle("/", http.FileServer(http.Dir("static/")))
 
 	mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
 	mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
@@ -184,7 +172,7 @@ func main() {
 	mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
 
 	// start server
-	log.Printf("RealTime server starting. Accepting connections on port %v/", CONFIG.PORT)
+	log.Printf("RealTime server starting. Accepting connections on port :%v", CONFIG.PORT)
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%v", CONFIG.PORT), mux); err != nil {
 		log.Fatal("ListenAndServe:", err)
@@ -195,24 +183,6 @@ func main() {
 
 }
 
-func getConf() (*config.Config, os.Error) {
-	p1 := filepath.Join(ROOT, CONF_NAME)
-	parent, _ := filepath.Split(ROOT)
-	p2 := filepath.Join(parent, "etc", CONF_NAME)
-
-	for _, p := range []string{p1, p2} {
-		if fileExists(p) {
-			if c, err := config.ReadDefault(p); err != nil {
-				return nil, os.NewError(fmt.Sprintf("Error reading config: %v", p))
-			} else {
-				return c, nil
-			}
-		}
-	}
-
-	return nil, os.NewError("No config file found")
-
-}
 
 func fileExists(f string) bool {
 	_, err := os.Stat(f)
