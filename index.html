@@ -8,73 +8,87 @@
   <script type="text/javascript">
     $(function() {
 
-		RT.debugging = true;
+		RT.debugging = false;
 
 		// connect with identity
-		RT.connect("",{},function() {
-			RT.plugins.liveCounter("chat_advanced",$(".counterNumber")[0]);
+		RT.connect(prompt("name"),{},function() {
+			
+			/*
+			RT.plugins.liveCounter({
+				channel : "chat_advanced",
+				counter : $(".counterNumber")[0]
+			});
+			
+			RT.plugins.isTyping({
+				channel : "chat_advanced",
+				input : $("#chatText")[0],
+				output : $("#chat")[0]
+			});
+			*/
+			
 			// once connected subscrube
     		RT.subscribe("chat_advanced");
+    		
+    		
+    		badge = RT.plugins.badge({
+				container : $("#chat")[0],
+				animate : "none"
+			});
 		});
 		
 		RT.createChannel("chat_advanced",{
 			onReceive : function(res) {
 				var message = res.data.msg;
-				isTyping = 0;
-				//doneTyping(res.identity);
 				// we could make msg be an object and have a type
 				// but were just gonna say if the first 4 is 'data' its an image
 				if(message.substring(0,4) == "data") {
 					$("#chat").append("<div><img src='" +message + "'/></div>");
 				} else {
 					//$("#chat").append("<div>"+res.identity+"["+res.timestamp+"] : " + res.data.msg + "</div>");
-					$("#chat").append("<div>" +message+ "</div>");
+					$("#chat").append("<div>"+res.identity+" - "+message+ "</div>");
 					
 					RT.plugins.notify({
-						title : "first message",
+						title : res.identity+":",
 						theme : "google",
-						position:"bottomright",
+						position:"topright",
 						msg : message					
 					});
 					
+					badge.update("+1");
+
 				}
 				// always scroll to bottom
 				RT.plugins.scrollToBottom($("#chat")[0]);
 			},
 			onSubscribe : function(res) {
-				$("#chat").append("<div>user has subscribed</div>");
+				$("#chat").append("<div>"+res.identity+" has subscribed</div>");
+				
+				/*
+				RT.plugins.notify({
+					title : "Welcome",
+					theme : "facebook",
+					position:"bottomleft",
+					msg : "who ever you are"					
+				});
+				*/
+				
 			},
 			onUnsubscribe : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user has UNsubscribed</div>");
+				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has UNsubscribed</div>");
 			},
 			onConnect : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user has connected</div>");
+				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has connected</div>");
 			},
 			onDisconnect : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user has disconnected</div>");
+				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has disconnected</div>");
 			},
 			onError : function(res) {
 				RT.debug("error: ",res);
-			},
-			
-			// custom methods
-			/*
-			onTyping : function(res) {
-				if(res.identity) {
-					$("#"+res.identity).remove();
-					$("#chat").append("<div id='"+res.identity+"'>user "+res.identity+" is typing</div>");
-				}	
-			},
-			doneTyping : function(res) {
-				doneTyping(res.identity);
-			},
-			*/
+			}
 		});
 		
         //send the message when submit is clicked
         $('#chatform').submit(function () {
-        	// call done typing
-			//doneTyping(RT.identity);
 			if($("#chatText").val()) {
         		RT.publish("chat_advanced",$("#chatText").val());
 				$("#chatText").val("");
@@ -103,40 +117,19 @@
      		RT.unsubscribe("chat_advanced");
      		return false;
      	});
-		
-		/*
-		var typingTimer;
-		var isTyping = 0;
-		$("#chatText").keydown(function(e) {
-			// you hit enter after you clearn, causing typingt come back
-			if(e.keyCode != 13) {
-				// make sure doneTyping doesn't get called
-				clearTimeout(typingTimer);
-				// call onTyping
-				if(!isTyping) {
-					isTyping = 1;
-					// send the signal to everyone else that im typing
-					RT.triggerEvent("chat_advanced","onTyping",{},true);
-				}	
-				// wait 1 second to send done Typing
-				typingTimer = setTimeout(function() {
-					isTyping = false;
-					RT.triggerEvent("chat_advanced","doneTyping");
-				},2000);
-			}	
-		});
-		*/
+     	
+     	
+     	$(".badgeOff").click(function() {
+     		badge.update("-1");
+     		return false;
+     	})
+     	
+     	$(".badgeUp").click(function() {
+     		badge.update("+1");
+     		return false;
+     	})
      	
     });
-    
-    /*
-    function doneTyping(who) {
-    	if(who) {
-    		isTyping = 0;
-    		$("#"+who).remove();
-    	}	
-    }
-    */
 
 </script>
 </head>
@@ -149,11 +142,13 @@
 	<div class="counterText">Users Online</div>
 </div>
 
-<div id="chat" style="width: 60em; height: 20em; overflow:auto; border: 1px solid black">
+<div id="chat" style="width: 40em; height: 20em; overflow:auto; border: 1px solid black">
 </div>
 <form id="chatform">
 <input type="text" id="chatText"/>
 <input type="submit" />
+<input type="button" class="badgeUp" value="plus 1" />
+<input type="button" class="badgeOff" value="minus 1" />
 <input type="button" class="unsub" value="unsub"/>
 
 

@@ -39,12 +39,7 @@ var RT = {
 		channelsCookie : "realTime_channels",
 		identityCookie : "realTime_identity",
 		server : "localhost",
-		notifyOptions : {
-			theme : "",
-			duration : 2000,
-			position : "bottomright",
-			animate : "fade"
-		}
+		socketURL : "http://cdn.socket.io/stable/socket.io.js"
 	},
 	
 	
@@ -65,8 +60,9 @@ var RT = {
 	******************************************************************/
 	
 	connect : function(identity,options,callback) {
-	
-		loadScript("http://cdn.socket.io/stable/socket.io.js",function() {
+		
+		loadScript(options.socketURL || RT.options.socketURL,function() {
+		//loadScript("io.js",function() {
 			var connected = RT._connect(identity,options,callback);
 			
 			// create init message
@@ -190,7 +186,7 @@ var RT = {
 						if(channelObj._hasMethod(json.data.command)) {
 							
 							// determine if your supposed to do this on yourself
-							if(!json.data.notMe || (json.identity != RT.identity)) {
+							if((json.data.options && !json.data.options.notMe) || (json.identity != RT.identity)) {
 							
 								// if a date format is set, convert timestamp
 								json.timestamp = RT.formatDate(json.timestamp);
@@ -324,15 +320,20 @@ var RT = {
 			var channel = channels[i];
 			// send the subscribe message to tornado
 			this.debug("Subscription: ",channel);
-			this.socket.send({
-				type : "command",
-				channel : channel,
-				data : {
-					command : "subscribe"
-				}
-			});
-			// save this channel
-			this.saveChannel(channel);
+			
+			try {
+				this.socket.send({
+					type : "command",
+					channel : channel,
+					data : {
+						command : "subscribe"
+					}
+				});
+				// save this channel
+				this.saveChannel(channel);
+			} catch(e) {
+				throw("You need to subscribe in the connect() call");
+			}	
 		}
 	},
 	
@@ -428,8 +429,8 @@ var RT = {
 		}
 		
 		// add a quick way to get to triggerEvent
-		this.channelMethods[channel]["_triggerEvent"] = function(event,options,notMe) {
-			this.triggerEvent(channel, event, options, notMe);
+		this.channelMethods[channel]["_triggerEvent"] = function(event,options) {
+			this.triggerEvent(channel, event, options);
 		}
 		
 		this.debug("Creating Channel: ",channel)
@@ -440,7 +441,6 @@ var RT = {
 	Input:	channel [String]
 	Input:	event [String]
 	Input:	options [Object]
-	Input:	notMe [Bool]
 	Output:	None
 	
 	This creates an arbitrary command to the sytem that will be passed
@@ -448,15 +448,14 @@ var RT = {
 	data.options as the passed options object.  If you pass notMe as 
 	true, then the event will not fire for you, only everyone else
 	******************************************************************/
-	triggerEvent : function(channel, event, options, notMe) {
+	triggerEvent : function(channel, event, options) {
 		this.debug("triggerEvent: ",event);
 		this.socket.send({
 			type : "command",
 			channel : channel,
 			data : {
 				command : event,
-				options : options,
-				notMe : notMe
+				options : options
 			}
 		});
 	},
@@ -505,14 +504,19 @@ var RT = {
 	in the instantiation of the object.  These plugin methods exist elsewhere
 	and should not interfere with whats going on
 	******************************************************************/
-	plugin : function(channel, callback) {
+	addMessageEvent : function(channel, callback) {
 		this.socket.addEvent('message', function(json) {
-		
 			if(typeof(json) != "object") json = JSON.parse(json);
-        	RT.debug("Plugin Method on ["+channel+"]: ",json);
-			
-			if(json.channel == channel) {
-				// fix the timestamp
+			if(json.type == "message" && json.channel == channel) {
+				json.timestamp = RT.formatDate(json.timestamp);
+				callback(json);
+			}
+		})
+	},
+	addCommandEvent : function(channel, command, callback) {
+		this.socket.addEvent('message', function(json) {
+			if(typeof(json) != "object") json = JSON.parse(json);
+			if(json.type == "command" && json.data.command == command && json.channel == channel) {
 				json.timestamp = RT.formatDate(json.timestamp);
 				callback(json);
 			}

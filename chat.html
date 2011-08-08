@@ -2,8 +2,9 @@
 <html>
 <head>
   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
-  <script src="http://cdn.socket.io/stable/socket.io.js"></script>
   <script src="realtime.js"></script>
+  <script src="plugins.js"></script>
+  <link rel="stylesheet" type="text/css" href="rt.css"/>
   <style type="text/css">
   	#chat {
   		width:300px;
@@ -14,36 +15,45 @@
   <script type="text/javascript">
     $(function() {
 
-		RT.debugging = true;
-		
 		// connect with identity 
-		RT.connect(prompt("Enter a nickname")); 
+		RT.connect("",{},function() {
+			RT.subscribe("chat");
+		});
+		
+		 
 		// creat the functionality for the chat
 		RT.createChannel("chat",{
 			onReceive : function(res) {
-				// append newly recieved message
-				$("#chat").append("<div>" + res.data.msg + "</div>");
-				// scroll to bottom
-				$("#chat")[0].scrollTop = $("#chat")[0].scrollHeight;
-			},
-			
-			// when a user subcribes, lets notify the chat
-			onSubscribe : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  user "+res.identity+" has connected</div>");
+				var msg = res.data.msg;
+				$("#chat").append("<div>" + msg + "</div>");
+				RT.plugins.scrollToBottom($("#chat")[0]);
+				
+				RT.plugins.notify({
+					theme : "facebook",
+					position:"top",
+					msg : msg
+				});
+				
+				RT.plugins.notify({
+					theme : "facebook",
+					position:"bottomleft",
+					msg : msg
+				});
+				
+				RT.plugins.notify({
+					theme : "facebook",
+					position:"bottomright",
+					msg : msg
+				});
+				
 			}
 		});
 
-		// on page load, connect to chat
-    	RT.subscribe("chat");
-		
+
         //send the message when submit is clicked
         $('#chatform').submit(function () {
-        	
-        	// make sure its not blank
 			if($("#chatText").val()) {
-				// publish
         		RT.publish("chat",$("#chatText").val());
-        		// clear text field
 				$("#chatText").val("");
 			}	
             return false;

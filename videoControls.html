@@ -1,41 +1,44 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <!--<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>-->
   <script src="realtime.js"></script>
-  <script src="plugins.js"></script>
   <script src="video.js"></script>
   <link rel="stylesheet" type="text/css" href="rt.css"/>
   <style type="text/css">
   
   </style>
   <script type="text/javascript">
- 	
- 	$(function() {
+ 	window.addEventListener("load",function() {
+ 		
  		RT.debugging = false;
  		RT.connect();
  		
- 		$("video").bind("play",function() {
- 			RT.publish("video",{action : "play"});
- 		});
+ 		var video = document.getElementById("video");
  		
- 		$("video").bind("pause",function() {
- 			RT.publish("video",{action : "pause"});
- 		});
+ 		video.addEventListener("play",function() {
  		
- 		$("video").bind("seeking",function(e) {
- 			RT.publish("video",{
- 				action : "seek",
- 				time : $("video")[0].currentTime
- 			});
- 		});
+ 			var worker = new Worker("worker.js");
+ 			worker.postMessage();
 
-	});	
-		
+ 			//RT.publish("video",{action : "play"});
+ 		},"false");
+ 		
+ 		video.addEventListener("pause",function() {
+ 			RT.publish("video",{action : "pause"});
+ 		},"false");
+ 		
+ 		video.addEventListener("seeking",function() {
+ 			RT.publish("video",{
+ 				action : "pause",
+ 				time : video.currentTime
+ 			});
+ 		},"false");
+ 	},"false");
   </script>
  </head>
  <body>
- 	<video id="video" width="640" height="360" controls>
+ 	<video id="video" width="640" height="360" controls preload>
 	<source src="http://clips.vorwaerts-gmbh.de/VfE_html5.mp4" type="video/mp4"><!-- Safari / iOS, IE9 -->
 	<source src="http://clips.vorwaerts-gmbh.de/VfE.webm" type="video/webm"><!-- Chrome10+, Ffx4+, Opera10.6+ -->
 	<source src="http://clips.vorwaerts-gmbh.de/VfE.ogv" type="video/ogg"><!-- Firefox3.6+ / Opera 10.5+ -->
