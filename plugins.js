@@ -16,7 +16,7 @@ RT.plugins.isTyping = function(o) {
 	
 	// listen for onTyping	
 	RT.addCommandEvent(o.channel,"onTyping",function(e) {
-		o.output.innerHTML = o.output.innerHTML + "<span id='typing'>"+e.identity+"is typing<span>";
+		o.output.innerHTML = o.output.innerHTML + "<span id='typing'>"+e.identity+" is typing<span>";
 	});
 	
 	// listen for finished Typing

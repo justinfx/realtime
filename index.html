@@ -44,7 +44,6 @@
 				if(message.substring(0,4) == "data") {
 					$("#chat").append("<div><img src='" +message + "'/></div>");
 				} else {
-					//$("#chat").append("<div>"+res.identity+"["+res.timestamp+"] : " + res.data.msg + "</div>");
 					$("#chat").append("<div>"+res.identity+" - "+message+ "</div>");
 					
 					RT.plugins.notify({
