@@ -64,22 +64,6 @@ var RT = {
 		loadScript(options.socketURL || RT.options.socketURL,function() {
 		//loadScript("io.js",function() {
 			var connected = RT._connect(identity,options,callback);
-			
-			// create init message
-	        var init = {
-	        	type : "command",
-				identity : identity,
-				data : {
-					command : "init",
-					options : {
-						channels : RT.getSavedChannles()
-					}	
-				}
-	        }
-	        
-	        // pass init to server
-	        RT.socket.send(init);
-	        RT.debug("init: ",init);
 	    });    
 		
 	},
@@ -118,6 +102,24 @@ var RT = {
         // if callback was passed
         
         this.socket.addEvent('connect',function() {
+        
+        	// create init message
+	        var init = {
+	        	type : "command",
+				identity : identity,
+				data : {
+					command : "init",
+					options : {
+						channels : RT.getSavedChannles()
+					}	
+				}
+	        }
+	        
+	        // pass init to server
+	        RT.socket.send(init);
+	        RT.debug("init: ",init);
+        	
+        	
         	if(callback) callback();
         });
         
