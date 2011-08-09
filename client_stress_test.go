@@ -3,8 +3,6 @@ package main
 import (
 	"testing"
 	"github.com/justinfx/go-socket.io"
-	"json"
-	"bytes"
 	"strings"
 	"os"
 	"log"
