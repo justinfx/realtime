@@ -2,7 +2,7 @@ package main
 
 import (
 	"testing"
-	"socketio"
+	"github.com/justinfx/go-socket.io"
 	"json"
 	"bytes"
 	"strings"
@@ -10,24 +10,10 @@ import (
 	"log"
 	"flag"
 	"strconv"
-	//"time"
 )
 
-func messageToBuffer(msg interface{}, buffer *bytes.Buffer) (err os.Error) {
-	buffer.Reset()
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
 
-	err = json.Compact(buffer, data)
-	if err != nil {
-		return err
-	}
-	return
-}
-
-func BenchmarkRealtime(b *testing.B) {
+func BenchmarkStressTest(b *testing.B) {
 
 	b.ResetTimer()
 	b.StopTimer()
@@ -35,7 +21,6 @@ func BenchmarkRealtime(b *testing.B) {
 	clients := 1
 	msg_size := 150 // bytes
 
-	//finished := make(chan bool, 1)
 	clientDisconnect := make(chan bool)
 
 	numMessages := b.N
@@ -61,12 +46,6 @@ func BenchmarkRealtime(b *testing.B) {
 	}
 
 	b.StartTimer()
-
-	/*
-		initCommand := `{"type":"command", "data":{"command":"init"}}`
-		subCommand := `{"type":"command","channel":"chat","data":{"command":"subscribe"}}`
-		msgCommand := `{"type":"message","channel":"chat","data":{"msg":"` + strings.Repeat("X", (msg_size-53)) + `"}}`
-	*/
 
 	for i := 0; i < clients; i++ {
 		go func() {
@@ -130,8 +109,6 @@ func BenchmarkRealtime(b *testing.B) {
 				log.Printf("Receiving messages...")
 				for i := 0; i < numMessages; i++ {
 					<-clientMessage
-					//log.Printf("Received #%v", i+1)
-					//b.SetBytes(int64(msg_size))
 				}
 				iook <- true
 			}()
@@ -154,6 +131,5 @@ func BenchmarkRealtime(b *testing.B) {
 		log.Printf("client #%d finished", i+1)
 	}
 
-	//finished <- true
 	log.Printf("Sent %v messages * %v concurrent clients = %v messages", numMessages, clients, numMessages*clients)
 }
