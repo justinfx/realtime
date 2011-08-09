@@ -108,7 +108,7 @@ func main() {
 	// create the socket.io server
 	config := socketio.DefaultConfig
 	config.QueueLength = CONFIG.HWM
-	config.HeartbeatInterval = 12e9
+	config.HeartbeatInterval = 20e9
 	config.Resource = "/realtime/"
 	config.Origins = CONFIG.DOMAINS
 
@@ -133,7 +133,6 @@ func main() {
 	}
 
 	sio := socketio.NewSocketIO(&config)
-	//rd := rdc.NewRedisDatabase(rdc.Configuration{})
 	handler := NewServerHandler(sio)
 
 	sio.OnConnect(func(c *socketio.Conn) { handler.OnConnect(c) })

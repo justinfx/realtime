@@ -112,13 +112,11 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 	}
 	Debugln("Raw message from client:", raw)
 
-	msg := NewMessage()
-	err := json.Unmarshal([]byte(raw), msg)
+	msg, err := s.jsonToData(raw)
 	if err != nil {
 		Debugln(err, "JSON:", raw, "MSG:", data.Data())
 		return
 	}
-	msg.raw = raw
 
 	s.clientsLock.RLock()
 	client, ok := s.clients[c.String()]
@@ -260,10 +258,10 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 		return
 	}
 
-	/*
-		if msg.Identity != "" {
-			client.Identity = msg.Identity
+	if msg.Identity != "" {
+		client.Identity = msg.Identity
 
+		/*
 			s.identsLock.Lock()
 			idents := s.idents[client.Identity]
 			if idents == nil {
@@ -273,9 +271,13 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 			idents.PushBack(client)
 
 			s.identsLock.Unlock()
-		}
-	*/
+		*/
+	}
+
 	channels := msg.Data["channels"]
+	// TODO: FIXME
+	// Need to properly unbox the []string. 
+	// Right now this crashes
 	if channels != nil {
 		for _, channel := range channels.([]string) {
 			cmdMsg := NewCommand()
@@ -323,6 +325,7 @@ func (s *ServerHandler) startDispatcher() {
 			toRemove = list.New()
 		)
 
+	Dispatch:
 		for {
 
 			select {
@@ -362,13 +365,14 @@ func (s *ServerHandler) startDispatcher() {
 						if clientTest.Conn == client.Conn {
 							err := os.NewError("client already subscribed to channel")
 							Debugln(err)
-							continue
+							continue Dispatch
 						}
 					}
 					_ = members.PushBack(client)
 
 					reply = NewCommand()
 					reply.Channel = msg.Channel
+					reply.Identity = client.Identity
 					reply.Data["command"] = "onSubscribe"
 					reply.Data["options"] = msg.Data["options"]
 					reply.Data["count"] = members.Len()
@@ -391,14 +395,14 @@ func (s *ServerHandler) startDispatcher() {
 							elem = e.Prev()
 							members.Remove(e)
 							ok = true
-							Debugln("startDispatcher(): unsubscribing %v from %v", msg.conn, msg.Channel)
-
+							Debugf("startDispatcher(): unsubscribing %v from %v", msg.conn, msg.Channel)
 							break
 						}
 					}
 					if ok {
 						reply = NewCommand()
 						reply.Channel = msg.Channel
+						reply.Identity = client.Identity
 						reply.Data["command"] = "onUnsubscribe"
 						reply.Data["options"] = msg.Data["options"]
 						reply.Data["count"] = members.Len()
@@ -438,19 +442,21 @@ func (s *ServerHandler) startDispatcher() {
 					continue
 				}
 
-				//Debugf("startDispatcher(): Routing msg to \"%v\"", msg.Channel)
+				//Debugln("startDispatcher(): Sending message w/ data - ", msg.Data)
 
 				toRemove.Init()
 
 				for e := members.Front(); e != nil; e = e.Next() {
 
 					client = e.Value.(*Client)
-					if client.Conn.Send(msg) != nil {
+					if err := client.Conn.Send(msg); err != nil {
 						// getting an error here most likely means
 						// that the client disconnected. we should not
 						// track their subscriptions
 						// TODO: impliment a form of persistance so that
 						// reconnecting clients can resume the last state
+
+						//Debugln("startDispatcher(): Error sending:", err)
 						toRemove.PushBack(e)
 					}
 				}
@@ -461,10 +467,20 @@ func (s *ServerHandler) startDispatcher() {
 					}
 					toRemove.Init()
 				}
-
 			}
 		}
 	}()
+}
+
+func (s *ServerHandler) jsonToData(raw string) (msg *message, err os.Error) {
+	msg = NewMessage()
+	err = json.Unmarshal([]byte(raw), msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.raw = raw
+
+	return msg, err
 }
 
 
@@ -491,9 +507,4 @@ func (c *Client) SetInit(val bool) {
 	c.lock.Lock()
 	c.hasInit = val
 	c.lock.Unlock()
-}
-
-type DispatchReq struct {
-	msg    *message
-	result chan interface{}
 }
