@@ -25,12 +25,13 @@ import (
 type ServerHandler struct {
 	Sio *socketio.SocketIO
 
-	subs, idents map[string]*list.List
-	clients      map[string]*Client
-	msgChannel   chan *message
-	srvcChannel  chan *message
-	quit         chan bool
-	quitting     bool
+	subs        map[string][]*Client
+	idents      map[string]*list.List
+	clients     map[string]*Client
+	msgChannel  chan *message
+	srvcChannel chan *message
+	quit        chan bool
+	quitting    bool
 
 	identsLock, clientsLock sync.RWMutex
 }
@@ -41,17 +42,18 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 	s = &ServerHandler{
 		Sio: sio,
 
-		subs:    make(map[string]*list.List),
+		subs:    map[string][]*Client{},
 		idents:  make(map[string]*list.List),
 		clients: make(map[string]*Client),
 
-		msgChannel:  make(chan *message),
-		srvcChannel: make(chan *message),
-		quit:        make(chan bool, 1),
+		msgChannel:  make(chan *message, 5000),
+		srvcChannel: make(chan *message, 500),
+		quit:        make(chan bool),
 		quitting:    false,
 	}
 
-	s.startDispatcher()
+	go s.dispatchServices()
+	go s.dispatchMessages()
 
 	return s
 }
@@ -78,9 +80,9 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	msgs := []*message{}
 
 	client.lock.RLock()
-	for e := client.Channels.Front(); e != nil; e = e.Next() {
+	for _, val := range client.Channels {
 		msg := NewCommand()
-		msg.Channel = e.Value.(string)
+		msg.Channel = val
 		msg.Data["command"] = "unsubscribe"
 		msg.Identity = client.Identity
 		msgs = append(msgs, msg)
@@ -186,7 +188,7 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 		// not a system command. forward it on
 		if msg.Channel != "" {
 			Debugln("Forwarding generic command message:", msg.raw)
-			s.publish(msg)
+			err = s.publish(msg)
 		} else {
 			err = os.NewError("Generic command message has no channel")
 		}
@@ -202,7 +204,7 @@ func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err os.Er
 	Debugln("msgHandler():", c, msg.raw)
 
 	msg.conn = c
-	s.publish(msg)
+	err = s.publish(msg)
 
 	return err
 }
@@ -214,9 +216,7 @@ func (s *ServerHandler) publish(msg *message) (err os.Error) {
 		return err
 	}
 
-	go func() {
-		s.msgChannel <- msg
-	}()
+	s.msgChannel <- msg
 
 	return
 }
@@ -226,9 +226,7 @@ func (s *ServerHandler) subscribeCmd(c *socketio.Conn, msg *message) (err os.Err
 	Debugln("subscribeCmd():", c, msg.raw)
 
 	msg.conn = c
-	go func() {
-		s.srvcChannel <- msg
-	}()
+	s.srvcChannel <- msg
 
 	return err
 }
@@ -237,9 +235,7 @@ func (s *ServerHandler) unsubscribeCmd(c *socketio.Conn, msg *message) (err os.E
 	Debugln("unsubscribeCmd():", c, msg.raw)
 
 	msg.conn = c
-	go func() {
-		s.srvcChannel <- msg
-	}()
+	s.srvcChannel <- msg
 
 	return err
 }
@@ -294,182 +290,173 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 
 func (s *ServerHandler) Shutdown() {
 	s.quitting = true
-	// if we are in debug mode, just shutdown right away
-	/*
-		if !CONFIG.DEBUG {
-			time.Sleep(5e9)
-		}
-	*/
+
 	close(s.srvcChannel)
 	close(s.msgChannel)
-	<-s.quit
+
+	for i:=0; i < 2; i++ {
+		<-s.quit
+	}
 }
 
 // A goroutine that coordinates the internal message
 // routing. Delivers messages to all members of the
 // given channel. Also processes (un)subscription commands
 // by updating an internal map.
-func (s *ServerHandler) startDispatcher() {
+func (s *ServerHandler) dispatchMessages() {
 
-	go func() {
+	// standard message channel. a message that will get
+	// published to all other connections currently
+	// subscribed to the same channel
+	
+	var (
+		msg *message
+		ok bool
+		members    []*Client
+	)
+	
+	for {
+		select {
+		case msg, ok = <-s.msgChannel:
+			if !ok {
+				s.quit <- true
+				return
+			}
+			if msg.Channel == "" {
+				continue
+			}
 
-		var (
-			msg                *message
-			reply              *message
-			ok                 bool
-			typ                string
-			elem               *list.Element
-			client, clientTest *Client
+			members = s.subs[msg.Channel]
+			if members == nil || len(members) == 0 {
+				continue
+			}
 
-			members  = list.New()
-			toRemove = list.New()
-		)
+			//Debugln("startDispatcher(): Sending message w/ data - ", msg.Data)
 
-	Dispatch:
-		for {
-
-			select {
-
-			// Service messages include subscribe/unsubscribe
-			// commands and are checked on a seperate channel
-			// from messages so that their queue doest get 
-			// flooded
-			case msg, ok = <-s.srvcChannel:
-				if !ok {
-					s.quit <- true
-					return
-				}
-				if msg.Channel == "" {
-					continue
-				}
-
-				members, ok = s.subs[msg.Channel]
-				if !ok {
-					members = list.New()
+			for i := 0; i < len(members); {
+				if err :=  members[i].Conn.Send(msg); err != nil {
+					members = append(members[:i], members[i+1:]...)
 					s.subs[msg.Channel] = members
+				} else {
+					i++
+				}
+			}
+		}
+	}
+}
+
+func (s *ServerHandler) dispatchServices() {
+	// Service messages include subscribe/unsubscribe
+	// commands and are checked on a seperate channel
+	// from messages so that their queue doest get 
+	// flooded
+	
+	var (
+		msg        *message
+		reply      *message
+		ok         bool
+		client     *Client
+		clientTest *Client
+		members    []*Client
+	)
+
+Dispatch:
+	for {
+		select {
+		case msg, ok = <-s.srvcChannel:
+			if !ok {
+				s.quit <- true
+				return
+			}
+			if msg.Channel == "" {
+				continue
+			}
+
+			members, ok = s.subs[msg.Channel]
+			if !ok {
+				members = []*Client{}
+			}
+
+			switch msg.Data["command"].(string) {
+
+			case "subscribe":
+
+				s.clientsLock.RLock()
+				client = s.clients[msg.conn.String()]
+				s.clientsLock.RUnlock()
+
+				for _, clientTest = range members {
+					if clientTest.Conn == client.Conn {
+						err := os.NewError("client already subscribed to channel")
+						Debugln(err)
+						continue Dispatch
+					}
+				}
+				members = append(members, client)
+				s.subs[msg.Channel] = members
+
+				reply = NewCommand()
+				reply.Channel = msg.Channel
+				reply.Identity = client.Identity
+				reply.Data["command"] = "onSubscribe"
+				reply.Data["options"] = msg.Data["options"]
+				reply.Data["count"] = len(members)
+
+				s.publish(reply)
+
+				client.lock.Lock()
+				client.Channels = append(client.Channels, msg.Channel)
+				client.lock.Unlock()
+
+				Debugf("startDispatcher(): subscribed %v => \"%v\"", client, msg.Channel)
+
+			case "unsubscribe":
+				client = nil
+				ok = false
+
+				for i := 0; i < len(members); {
+					client = members[i]
+					if client.Conn == msg.conn {
+						members = append(members[:i], members[i+1:]...)
+						ok = true
+						Debugf("startDispatcher(): unsubscribing %v from %v", msg.conn, msg.Channel)
+						break
+					} else {
+						i++
+					}
 				}
 
-				typ = msg.Data["command"].(string)
-
-				switch typ {
-
-				// add this member to the given channel
-				case "subscribe":
-
-					s.clientsLock.RLock()
-					client = s.clients[msg.conn.String()]
-					s.clientsLock.RUnlock()
-
-					for e := members.Front(); e != nil; e = e.Next() {
-						clientTest = e.Value.(*Client)
-						if clientTest.Conn == client.Conn {
-							err := os.NewError("client already subscribed to channel")
-							Debugln(err)
-							continue Dispatch
-						}
-					}
-					_ = members.PushBack(client)
+				if ok {
+					s.subs[msg.Channel] = members
 
 					reply = NewCommand()
-					reply.Channel = msg.Channel
+					client.lock.RLock()
 					reply.Identity = client.Identity
-					reply.Data["command"] = "onSubscribe"
+					client.lock.RUnlock()
+					reply.Channel = msg.Channel
+					reply.Data["command"] = "onUnsubscribe"
 					reply.Data["options"] = msg.Data["options"]
-					reply.Data["count"] = members.Len()
+					reply.Data["count"] = len(members)
 
 					s.publish(reply)
 
 					client.lock.Lock()
-					client.Channels.PushBack(msg.Channel)
-					client.lock.Unlock()
-
-					Debugf("startDispatcher(): subscribed %v => \"%v\"", client, msg.Channel)
-
-				// remove this member from the given channel
-				case "unsubscribe":
-					client = nil
-					ok = false
-					for e := members.Front(); e != nil; e = e.Next() {
-						client = e.Value.(*Client)
-						if client.Conn == msg.conn {
-							elem = e.Prev()
-							members.Remove(e)
-							ok = true
-							Debugf("startDispatcher(): unsubscribing %v from %v", msg.conn, msg.Channel)
+					for i, val := range client.Channels {
+						if msg.Channel == val {
+							client.Channels = append(client.Channels[:i], client.Channels[i+1:]...)
 							break
 						}
 					}
-					if ok {
-						reply = NewCommand()
-						reply.Channel = msg.Channel
-						reply.Identity = client.Identity
-						reply.Data["command"] = "onUnsubscribe"
-						reply.Data["options"] = msg.Data["options"]
-						reply.Data["count"] = members.Len()
+					client.lock.Unlock()
 
-						s.publish(reply)
-
-						client.lock.Lock()
-						for e := client.Channels.Front(); e != nil; e = e.Next() {
-							if msg.Channel == e.Value.(string) {
-								client.Channels.Remove(e)
-								break
-							}
-						}
-						client.lock.Unlock()
-
-					} else {
-						err := os.NewError("client was not subscribed to channel")
-						Debugln(err)
-						continue
-					}
-				}
-
-			// standard message channel. a message that will get
-			// published to all other connections currently
-			// subscribed to the same channel
-			case msg, ok = <-s.msgChannel:
-				if !ok {
-					s.quit <- true
-					return
-				}
-				if msg.Channel == "" {
+				} else {
+					err := os.NewError("client was not subscribed to channel")
+					Debugln(err)
 					continue
-				}
-
-				members = s.subs[msg.Channel]
-				if members == nil {
-					continue
-				}
-
-				//Debugln("startDispatcher(): Sending message w/ data - ", msg.Data)
-
-				toRemove.Init()
-
-				for e := members.Front(); e != nil; e = e.Next() {
-
-					client = e.Value.(*Client)
-					if err := client.Conn.Send(msg); err != nil {
-						// getting an error here most likely means
-						// that the client disconnected. we should not
-						// track their subscriptions
-						// TODO: impliment a form of persistance so that
-						// reconnecting clients can resume the last state
-
-						//Debugln("startDispatcher(): Error sending:", err)
-						toRemove.PushBack(e)
-					}
-				}
-				if toRemove.Len() > 0 {
-					for e := toRemove.Front(); e != nil; e = e.Next() {
-						elem = e.Value.(*list.Element)
-						members.Remove(elem)
-					}
-					toRemove.Init()
 				}
 			}
 		}
-	}()
+	}
 }
 
 func (s *ServerHandler) jsonToData(raw string) (msg *message, err os.Error) {
@@ -487,7 +474,7 @@ func (s *ServerHandler) jsonToData(raw string) (msg *message, err os.Error) {
 type Client struct {
 	Identity string
 	Conn     *socketio.Conn
-	Channels list.List
+	Channels []string
 	hasInit  bool
 	lock     sync.RWMutex
 }
