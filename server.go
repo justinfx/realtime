@@ -10,7 +10,6 @@ package main
 
 import (
 	"os"
-	"container/list"
 	"json"
 	"sync"
 	"fmt"
@@ -26,8 +25,9 @@ type ServerHandler struct {
 	Sio *socketio.SocketIO
 
 	subs        map[string][]*Client
-	idents      map[string]*list.List
+	idents      map[string]*Client
 	clients     map[string]*Client
+	
 	msgChannel  chan *message
 	srvcChannel chan *message
 	quit        chan bool
@@ -42,8 +42,8 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 	s = &ServerHandler{
 		Sio: sio,
 
-		subs:    map[string][]*Client{},
-		idents:  make(map[string]*list.List),
+		subs:    make(map[string][]*Client),
+		idents:  make(map[string]*Client),
 		clients: make(map[string]*Client),
 
 		msgChannel:  make(chan *message, 5000),
@@ -61,17 +61,17 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 // When a new user connects, associate their connection
 // with an id -> Client object
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
-	//Debugln("New connection:", c)
 
+	/*
 	s.clientsLock.Lock()
-	s.clients[c.String()] = &Client{Conn: c}
+	s.clients[c.String()] = &Client{Conns: c}
 	s.clientsLock.Unlock()
+	*/
 }
 
 // When a client disconnected, remove their Client
 // object reference
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
-	//Debugln("Client Disconnected:", c)
 
 	s.clientsLock.Lock()
 	client := s.clients[c.String()]
@@ -123,22 +123,18 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 	s.clientsLock.RLock()
 	client, ok := s.clients[c.String()]
 
-	if ok {
-		if !client.HasInit() {
-			if msg.Type == "command" && msg.Data["command"] == "init" {
-				//yay. we want an init command here
-			} else {
-				errMsg := NewErrorMessage("Client has not sent init command yet!")
-				Debugln(errMsg)
-				c.Send(errMsg)
-				s.clientsLock.RUnlock()
-				return
-			}
+	if !ok || !client.HasInit() {
+		if msg.Type == "command" && msg.Data["command"] == "init" {
+			//yay. we want an init command here
 		} else {
-			// for anything other than the init, we want to keep passing
-			// the original Identity value with messages.
-			msg.Identity = client.Identity
-		}
+			errMsg := NewErrorMessage("Client has not sent init command yet!")
+			Debugln(errMsg)
+			c.Send(errMsg)
+			s.clientsLock.RUnlock()
+			return
+		}	
+	} else if ok {
+		msg.Identity = client.Identity
 	} else {
 		Debugln("Received msg from client, yet there is no Client object record from the connection")
 		return
@@ -248,32 +244,47 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	s.clientsLock.Lock()
 	defer s.clientsLock.Unlock()
 
-	client := s.clients[c.String()]
-
-	if client.HasInit() {
+	var (
+		client *Client
+		ok bool
+	)
+	
+	client, ok = s.clients[c.String()]
+	if ok && client.HasInit() {
+		Debugln("initCmd(): Client has already init before:", c)
 		return
-	}
+	} 
 
 	if msg.Identity != "" {
-		client.Identity = msg.Identity
-
-		/*
-			s.identsLock.Lock()
-			idents := s.idents[client.Identity]
-			if idents == nil {
-				idents = list.New()
-				s.idents[client.Identity] = idents
+		s.identsLock.Lock()
+		client, ok = s.idents[msg.Identity]
+		if ok {
+			client.Conns = append(client.Conns, c)
+			Debugln("initCmd(): adding conn to existing Client group:", client)
+		} else {
+			client = &Client{
+				Identity: msg.Identity,
+				Conns: []*socketio.Conn{c},
 			}
-			idents.PushBack(client)
-
-			s.identsLock.Unlock()
-		*/
+			Debugln("initCmd(): conn is new. creating new Client group:", client)
+		}
+		s.idents[msg.Identity] = client
+		s.identsLock.Unlock()
+		
+		s.clients[c.String()] = client
+		
+	} else {
+		client = &Client{
+			Conns: []*socketio.Conn{c},
+		}
+		s.clients[c.String()] = client
 	}
 
-	channels := msg.Data["channels"]
+	/*
 	// TODO: FIXME
 	// Need to properly unbox the []string. 
 	// Right now this crashes
+	channels := msg.Data["channels"]
 	if channels != nil {
 		for _, channel := range channels.([]string) {
 			cmdMsg := NewCommand()
@@ -281,6 +292,7 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 			s.subscribeCmd(c, cmdMsg)
 		}
 	}
+	*/
 
 	client.SetInit(true)
 
@@ -333,12 +345,14 @@ func (s *ServerHandler) dispatchMessages() {
 
 			//Debugln("startDispatcher(): Sending message w/ data - ", msg.Data)
 
-			for i := 0; i < len(members); {
-				if err :=  members[i].Conn.Send(msg); err != nil {
-					members = append(members[:i], members[i+1:]...)
-					s.subs[msg.Channel] = members
-				} else {
-					i++
+			for i, _ := range members {
+				for j := 0; j < len(members[i].Conns); {
+					if err :=  members[i].Conns[j].Send(msg); err != nil {
+						members[i].Conns = append(members[i].Conns[:j], members[i].Conns[j+1:]...)
+						//s.subs[msg.Channel] = members
+					} else {
+						j++
+					}
 				}
 			}
 		}
@@ -386,7 +400,7 @@ Dispatch:
 				s.clientsLock.RUnlock()
 
 				for _, clientTest = range members {
-					if clientTest.Conn == client.Conn {
+					if clientTest == client {
 						err := os.NewError("client already subscribed to channel")
 						Debugln(err)
 						continue Dispatch
@@ -408,18 +422,22 @@ Dispatch:
 				client.Channels = append(client.Channels, msg.Channel)
 				client.lock.Unlock()
 
-				Debugf("startDispatcher(): subscribed %v => \"%v\"", client, msg.Channel)
+				Debugf("dispatchServices(): subscribed %v => \"%v\"", client, msg.Channel)
 
 			case "unsubscribe":
-				client = nil
+
 				ok = false
 
+				s.clientsLock.RLock()
+				client = s.clients[msg.conn.String()]
+				s.clientsLock.RUnlock()
+				
 				for i := 0; i < len(members); {
-					client = members[i]
-					if client.Conn == msg.conn {
+					clientTest = members[i]
+					if clientTest == client {
 						members = append(members[:i], members[i+1:]...)
 						ok = true
-						Debugf("startDispatcher(): unsubscribing %v from %v", msg.conn, msg.Channel)
+						Debugf("dispatchServices(): unsubscribing %v from %v", msg.conn, msg.Channel)
 						break
 					} else {
 						i++
@@ -473,14 +491,15 @@ func (s *ServerHandler) jsonToData(raw string) (msg *message, err os.Error) {
 
 type Client struct {
 	Identity string
-	Conn     *socketio.Conn
+	Conns    []*socketio.Conn
 	Channels []string
 	hasInit  bool
 	lock     sync.RWMutex
 }
 
+
 func (c *Client) String() string {
-	return fmt.Sprintf("Client{Identity: %v, Conn: %v}", c.Identity, c.Conn.String())
+	return fmt.Sprintf("Client{Identity: %v, #Conn: %d, Conn: %v}", c.Identity, len(c.Conns), c.Conns)
 }
 
 func (c *Client) HasInit() bool {
