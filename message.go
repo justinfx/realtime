@@ -13,11 +13,6 @@ package main
 import (
 	"time"
 	"fmt"
-
-	// 3rd party
-	"github.com/justinfx/go-socket.io"
-	//"github.com/madari/go-socket.io"
-	//"socketio" // dev only
 )
 
 const (
@@ -37,7 +32,6 @@ type message struct {
 
 	raw   string
 	mtype int
-	conn  *socketio.Conn
 }
 
 func (m *message) String() string {
