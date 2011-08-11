@@ -15,21 +15,21 @@ import (
 	"fmt"
 
 	// 3rd party
-	"github.com/justinfx/go-socket.io"
+	//"github.com/justinfx/go-socket.io"
 	//"github.com/madari/go-socket.io"
-	//"socketio" // dev only
+	"socketio" // dev only
 )
 
 
 type ServerHandler struct {
 	Sio *socketio.SocketIO
 
-	subs        map[string][]*Client
-	idents      map[string]*Client
-	clients     map[string]*Client
-	
-	msgChannel  chan *message
-	srvcChannel chan *message
+	subs    map[string][]*Client
+	idents  map[string]*Client
+	clients map[string]*Client
+
+	msgChannel  chan *DispatchReq
+	srvcChannel chan *DispatchReq
 	quit        chan bool
 	quitting    bool
 
@@ -46,8 +46,8 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 		idents:  make(map[string]*Client),
 		clients: make(map[string]*Client),
 
-		msgChannel:  make(chan *message, 5000),
-		srvcChannel: make(chan *message, 500),
+		msgChannel:  make(chan *DispatchReq, 5000),
+		srvcChannel: make(chan *DispatchReq, 500),
 		quit:        make(chan bool),
 		quitting:    false,
 	}
@@ -63,39 +63,66 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 
 	/*
-	s.clientsLock.Lock()
-	s.clients[c.String()] = &Client{Conns: c}
-	s.clientsLock.Unlock()
+		s.clientsLock.Lock()
+		s.clients[c.String()] = &Client{Conns: c}
+		s.clientsLock.Unlock()
 	*/
 }
 
 // When a client disconnected, remove their Client
 // object reference
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
-
-	s.clientsLock.Lock()
+	
+	wg := &sync.WaitGroup{}
+	
+	s.clientsLock.RLock()
 	client := s.clients[c.String()]
-	s.clientsLock.Unlock()
-
-	msgs := []*message{}
+	s.clientsLock.RUnlock()
 
 	client.lock.RLock()
-	for _, val := range client.Channels {
-		msg := NewCommand()
-		msg.Channel = val
-		msg.Data["command"] = "unsubscribe"
-		msg.Identity = client.Identity
-		msgs = append(msgs, msg)
-	}
-	client.lock.RUnlock()
+	identity := client.Identity
+	
+	if len(client.Conns) <= 1 {
+		Debugln("OnDisconnect(): Client is last in group. Unsubscribing", client.Channels)
 
-	for _, m := range msgs {
-		s.unsubscribeCmd(c, m)
+		msgs := []*message{}
+		for _, val := range client.Channels {
+			msg := NewCommand()
+			msg.Channel = val
+			msg.Data["command"] = "unsubscribe"
+			msg.Identity = identity
+			msgs = append(msgs, msg)
+		}
+		client.lock.RUnlock()
+
+		for _, m := range msgs {
+			wg.Add(1)
+			go func() {
+				req := NewDispatchReq(c, m, true)
+				s.unsubscribeCmd(req)
+				wg.Done()
+			}()
+		}
+
+		if identity != "" {
+			s.identsLock.Lock()
+			s.idents[identity] = nil, false
+			s.identsLock.Unlock()
+		}
+
+	} else {
+		client.lock.RUnlock()
 	}
+	
+	wg.Wait()
+	
+	client.RemoveConn(c)
 
 	s.clientsLock.Lock()
 	s.clients[c.String()] = nil, false
+	Debugln("OnDisconnect: cleared connection from client list")
 	s.clientsLock.Unlock()
+
 }
 
 // When a raw message comes in from a connected client, we need
@@ -105,14 +132,12 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 		return
 	}
 
-	Debugln("Incoming message from client:", c.String())
-
 	// first try to see if the data is recognized as valid JSON
 	raw, ok := data.JSON()
 	if !ok {
 		raw = data.Data()
 	}
-	Debugln("Raw message from client:", raw)
+	Debugln("Raw message from client:", c.String(), raw)
 
 	msg, err := s.jsonToData(raw)
 	if err != nil {
@@ -132,7 +157,7 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 			c.Send(errMsg)
 			s.clientsLock.RUnlock()
 			return
-		}	
+		}
 	} else if ok {
 		msg.Identity = client.Identity
 	} else {
@@ -172,19 +197,19 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 		err = os.NewError("Malformed command message")
 
 	case "subscribe":
-		err = s.subscribeCmd(c, msg)
+		s.subscribeCmd(NewDispatchReq(c, msg, false))
 
 	case "unsubscribe":
-		err = s.unsubscribeCmd(c, msg)
+		s.unsubscribeCmd(NewDispatchReq(c, msg, false))
 
 	case "init":
-		err = s.initCmd(c, msg)
+		s.initCmd(NewDispatchReq(c, msg, false))
 
 	default:
 		// not a system command. forward it on
 		if msg.Channel != "" {
 			Debugln("Forwarding generic command message:", msg.raw)
-			err = s.publish(msg)
+			err = s.publish(c, msg)
 		} else {
 			err = os.NewError("Generic command message has no channel")
 		}
@@ -199,80 +224,87 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err os.Error) {
 	Debugln("msgHandler():", c, msg.raw)
 
-	msg.conn = c
-	err = s.publish(msg)
+	err = s.publish(c, msg)
 
 	return err
 }
 
-func (s *ServerHandler) publish(msg *message) (err os.Error) {
+func (s *ServerHandler) publish(c *socketio.Conn, msg *message) (err os.Error) {
 
 	if msg.Channel == "" || msg.Data == nil || len(msg.Data) == 0 {
 		err = os.NewError("msg either has no channel or no data. not publishing")
 		return err
 	}
 
-	s.msgChannel <- msg
+	req := NewDispatchReq(c, msg, false)
+	s.msgChannel <- req
 
 	return
 }
 
 
-func (s *ServerHandler) subscribeCmd(c *socketio.Conn, msg *message) (err os.Error) {
-	Debugln("subscribeCmd():", c, msg.raw)
+func (s *ServerHandler) subscribeCmd(req *DispatchReq) {
+	Debugln("subscribeCmd():", req.Conn, req.Msg.raw)
 
-	msg.conn = c
-	s.srvcChannel <- msg
+	s.srvcChannel <- req
+	if req.Wait {
+		<-req.done
+	}
 
-	return err
+	return 
 }
 
-func (s *ServerHandler) unsubscribeCmd(c *socketio.Conn, msg *message) (err os.Error) {
-	Debugln("unsubscribeCmd():", c, msg.raw)
+func (s *ServerHandler) unsubscribeCmd(req *DispatchReq) {
+	Debugln("unsubscribeCmd():", req.Conn, req.Msg.raw)
 
-	msg.conn = c
-	s.srvcChannel <- msg
-
-	return err
+	s.srvcChannel <- req
+	if req.Wait {
+		<-req.done
+	}
+	
+	return 
 }
 
 // A client should first send an init command to establish their
 // identity, and optional batch subscribe to any channels
-func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
-	Debugln("initCmd():", c, msg.raw)
-
+func (s *ServerHandler) initCmd(req *DispatchReq) {
+	Debugln("initCmd():", req.Conn, req.Msg.raw)
+	
+	c := req.Conn
+	msg := req.Msg
+	
 	s.clientsLock.Lock()
 	defer s.clientsLock.Unlock()
 
 	var (
 		client *Client
-		ok bool
+		ok     bool
 	)
-	
+
 	client, ok = s.clients[c.String()]
 	if ok && client.HasInit() {
 		Debugln("initCmd(): Client has already init before:", c)
 		return
-	} 
+	}
 
 	if msg.Identity != "" {
 		s.identsLock.Lock()
 		client, ok = s.idents[msg.Identity]
 		if ok {
-			client.Conns = append(client.Conns, c)
+			client.AddConn(c)
 			Debugln("initCmd(): adding conn to existing Client group:", client)
 		} else {
 			client = &Client{
 				Identity: msg.Identity,
-				Conns: []*socketio.Conn{c},
+				Conns:    []*socketio.Conn{c},
 			}
 			Debugln("initCmd(): conn is new. creating new Client group:", client)
 		}
 		s.idents[msg.Identity] = client
 		s.identsLock.Unlock()
-		
+
 		s.clients[c.String()] = client
-		
+
 	} else {
 		client = &Client{
 			Conns: []*socketio.Conn{c},
@@ -281,17 +313,17 @@ func (s *ServerHandler) initCmd(c *socketio.Conn, msg *message) (err os.Error) {
 	}
 
 	/*
-	// TODO: FIXME
-	// Need to properly unbox the []string. 
-	// Right now this crashes
-	channels := msg.Data["channels"]
-	if channels != nil {
-		for _, channel := range channels.([]string) {
-			cmdMsg := NewCommand()
-			cmdMsg.Channel = channel
-			s.subscribeCmd(c, cmdMsg)
+		// TODO: FIXME
+		// Need to properly unbox the []string. 
+		// Right now this crashes
+		channels := msg.Data["channels"]
+		if channels != nil {
+			for _, channel := range channels.([]string) {
+				cmdMsg := NewCommand()
+				cmdMsg.Channel = channel
+				s.subscribeCmd(c, cmdMsg)
+			}
 		}
-	}
 	*/
 
 	client.SetInit(true)
@@ -306,7 +338,7 @@ func (s *ServerHandler) Shutdown() {
 	close(s.srvcChannel)
 	close(s.msgChannel)
 
-	for i:=0; i < 2; i++ {
+	for i := 0; i < 2; i++ {
 		<-s.quit
 	}
 }
@@ -320,26 +352,31 @@ func (s *ServerHandler) dispatchMessages() {
 	// standard message channel. a message that will get
 	// published to all other connections currently
 	// subscribed to the same channel
-	
+
 	var (
-		msg *message
-		ok bool
-		members    []*Client
+		req     *DispatchReq
+		msg     *message
+		ok      bool
+		members []*Client
 	)
-	
+
 	for {
 		select {
-		case msg, ok = <-s.msgChannel:
+		case req, ok = <-s.msgChannel:
 			if !ok {
 				s.quit <- true
 				return
 			}
+			msg = req.Msg
+
 			if msg.Channel == "" {
+				req.SetDone()
 				continue
 			}
 
 			members = s.subs[msg.Channel]
 			if members == nil || len(members) == 0 {
+				req.SetDone()
 				continue
 			}
 
@@ -347,7 +384,7 @@ func (s *ServerHandler) dispatchMessages() {
 
 			for i, _ := range members {
 				for j := 0; j < len(members[i].Conns); {
-					if err :=  members[i].Conns[j].Send(msg); err != nil {
+					if err := members[i].Conns[j].Send(msg); err != nil {
 						members[i].Conns = append(members[i].Conns[:j], members[i].Conns[j+1:]...)
 						//s.subs[msg.Channel] = members
 					} else {
@@ -355,6 +392,7 @@ func (s *ServerHandler) dispatchMessages() {
 					}
 				}
 			}
+			req.SetDone()
 		}
 	}
 }
@@ -364,8 +402,9 @@ func (s *ServerHandler) dispatchServices() {
 	// commands and are checked on a seperate channel
 	// from messages so that their queue doest get 
 	// flooded
-	
+
 	var (
+		req        *DispatchReq
 		msg        *message
 		reply      *message
 		ok         bool
@@ -377,12 +416,15 @@ func (s *ServerHandler) dispatchServices() {
 Dispatch:
 	for {
 		select {
-		case msg, ok = <-s.srvcChannel:
+		case req, ok = <-s.srvcChannel:
 			if !ok {
 				s.quit <- true
 				return
 			}
+			msg = req.Msg
+
 			if msg.Channel == "" {
+				req.SetDone()
 				continue
 			}
 
@@ -396,13 +438,14 @@ Dispatch:
 			case "subscribe":
 
 				s.clientsLock.RLock()
-				client = s.clients[msg.conn.String()]
+				client = s.clients[req.Conn.String()]
 				s.clientsLock.RUnlock()
 
 				for _, clientTest = range members {
 					if clientTest == client {
 						err := os.NewError("client already subscribed to channel")
 						Debugln(err)
+						req.SetDone()
 						continue Dispatch
 					}
 				}
@@ -411,16 +454,14 @@ Dispatch:
 
 				reply = NewCommand()
 				reply.Channel = msg.Channel
-				reply.Identity = client.Identity
+				reply.Identity = msg.Identity
 				reply.Data["command"] = "onSubscribe"
 				reply.Data["options"] = msg.Data["options"]
 				reply.Data["count"] = len(members)
 
-				s.publish(reply)
+				s.publish(req.Conn, reply)
 
-				client.lock.Lock()
-				client.Channels = append(client.Channels, msg.Channel)
-				client.lock.Unlock()
+				client.AddChannel(msg.Channel)
 
 				Debugf("dispatchServices(): subscribed %v => \"%v\"", client, msg.Channel)
 
@@ -429,15 +470,17 @@ Dispatch:
 				ok = false
 
 				s.clientsLock.RLock()
-				client = s.clients[msg.conn.String()]
+				client = s.clients[req.Conn.String()]
 				s.clientsLock.RUnlock()
-				
+
 				for i := 0; i < len(members); {
 					clientTest = members[i]
+					//Debugf("dispatchServices(): %v == %v ? %v", clientTest, client, clientTest==client)
 					if clientTest == client {
 						members = append(members[:i], members[i+1:]...)
+						s.subs[msg.Channel] = members
 						ok = true
-						Debugf("dispatchServices(): unsubscribing %v from %v", msg.conn, msg.Channel)
+						Debugf("dispatchServices(): unsubscribing %v from %v", req.Conn, msg.Channel)
 						break
 					} else {
 						i++
@@ -445,34 +488,25 @@ Dispatch:
 				}
 
 				if ok {
-					s.subs[msg.Channel] = members
-
 					reply = NewCommand()
-					client.lock.RLock()
-					reply.Identity = client.Identity
-					client.lock.RUnlock()
+					reply.Identity = msg.Identity
 					reply.Channel = msg.Channel
 					reply.Data["command"] = "onUnsubscribe"
 					reply.Data["options"] = msg.Data["options"]
-					reply.Data["count"] = len(members)
+					reply.Data["count"] = len(s.subs[msg.Channel])
 
-					s.publish(reply)
+					s.publish(req.Conn, reply)
 
-					client.lock.Lock()
-					for i, val := range client.Channels {
-						if msg.Channel == val {
-							client.Channels = append(client.Channels[:i], client.Channels[i+1:]...)
-							break
-						}
-					}
-					client.lock.Unlock()
+					client.RemoveChannel(msg.Channel)
 
 				} else {
 					err := os.NewError("client was not subscribed to channel")
 					Debugln(err)
+					req.SetDone()
 					continue
 				}
 			}
+			req.SetDone()
 		}
 	}
 }
@@ -502,6 +536,46 @@ func (c *Client) String() string {
 	return fmt.Sprintf("Client{Identity: %v, #Conn: %d, Conn: %v}", c.Identity, len(c.Conns), c.Conns)
 }
 
+func (c *Client) AddConn(conn *socketio.Conn) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.Conns = append(c.Conns, conn)
+}
+
+func (c *Client) RemoveConn(conn *socketio.Conn) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for i := 0; i < len(c.Conns); {
+		if c.Conns[i] == conn {
+			c.Conns = append(c.Conns[:i], c.Conns[i+1:]...)
+		} else {
+			i++
+		}
+	}
+}
+
+func (c *Client) AddChannel(channel string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.Channels = append(c.Channels, channel)
+}
+
+func (c *Client) RemoveChannel(channel string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for i := 0; i < len(c.Channels); {
+		if c.Channels[i] == channel {
+			c.Channels = append(c.Channels[:i], c.Channels[i+1:]...)
+		} else {
+			i++
+		}
+	}
+}
+
 func (c *Client) HasInit() bool {
 	c.lock.RLock()
 	init := c.hasInit
@@ -514,3 +588,26 @@ func (c *Client) SetInit(val bool) {
 	c.hasInit = val
 	c.lock.Unlock()
 }
+
+type DispatchReq struct {
+	Msg   *message
+	Wait bool
+	Conn  *socketio.Conn
+	done chan bool
+
+}
+
+func NewDispatchReq(c *socketio.Conn, m *message, wait bool) *DispatchReq {
+	return &DispatchReq{
+		Msg:   m,
+		Conn:  c,
+		Wait: wait,
+		done: make(chan bool),
+	}
+}
+
+func (d *DispatchReq) SetDone() {
+	if d.Wait {
+		d.done<-true
+	}
+} 
