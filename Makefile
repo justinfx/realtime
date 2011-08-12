@@ -7,9 +7,7 @@ GOFILES=\
 	server.go\
 	realtime.go\
 
-GOTESTFILES=\
-	realtime_test.go\
-     
+    
 include $(GOROOT)/src/Make.cmd
 
 .PHONY: gofmt, test
