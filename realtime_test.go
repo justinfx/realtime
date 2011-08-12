@@ -1,19 +1,20 @@
 package main
 
 import (
-	//"socketio"
-	"github.com/justinfx/go-socket.io"
+	"socketio"
+	//"github.com/justinfx/go-socket.io"
+	//"github.com/madari/go-socket.io"
 	"fmt"
 	"http"
-	"time"
 	"testing"
-	"os"
+	"time"
+	"sync"
 )
 
 const (
-	SERVER_ADDR = "localhost:9999"
-	IDENT       = "TEST1"
-
+	SERVER_ADDR  = "localhost:9999"
+	IDENT        = "TEST1"
+	NUM_MSGS     = 5
 	eventConnect = iota
 	eventDisconnect
 	eventMessage
@@ -23,51 +24,11 @@ const (
 var EVENTS chan *event
 var SERVER *ServerHandler
 
-
 type event struct {
 	conn      *socketio.Conn
 	eventType uint8
 	msg       socketio.Message
 }
-
-
-func startServer() <-chan *event {
-
-	if SERVER != nil && EVENTS != nil {
-		return EVENTS
-	}
-
-	config := socketio.DefaultConfig
-	config.QueueLength = 50
-	config.Resource = "/realtime/"
-	config.ReconnectTimeout = 2e9
-	config.Origins = []string{"*"}
-
-	EVENTS = make(chan *event, 100)
-
-	sio := socketio.NewSocketIO(&config)
-	SERVER = NewServerHandler(sio)
-
-	sio.OnConnect(func(c *socketio.Conn) {
-		SERVER.OnConnect(c)
-		EVENTS <- &event{c, eventConnect, nil}
-	})
-	sio.OnDisconnect(func(c *socketio.Conn) {
-		SERVER.OnDisconnect(c)
-		EVENTS <- &event{c, eventDisconnect, nil}
-	})
-	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) {
-		SERVER.OnMessage(c, msg)
-		EVENTS <- &event{c, eventMessage, msg}
-	})
-	go func() {
-		http.ListenAndServe(fmt.Sprintf(SERVER_ADDR), sio.ServeMux())
-		EVENTS <- &event{nil, eventCrash, nil}
-	}()
-
-	return EVENTS
-}
-
 
 func newInit() *message {
 	cmd := NewCommand()
@@ -96,19 +57,71 @@ func newMsg() *message {
 	return msg
 }
 
+func newInitStr() string {
+	return `{"type":"command","identity": "TEST1","data":{"command":"init"}}`
+}
+func newSubStr() string {
+	return `{"type":"command","identity": "TEST1","channel": "chat","data":{"command":"subscribe"}}`
+}
+func newUnsubStr() string {
+	return `{"type":"command","identity": "TEST1","channel": "chat","data":{"command":"unsubscribe"}}`
+}
+func newMsgStr(msg string) string {
+	return fmt.Sprintf(`{"type":"message","identity": "TEST1","channel": "chat","data":{"msg":"%v"}}`, msg)
+}
+
+func startServer() <-chan *event {
+
+	if SERVER != nil && EVENTS != nil {
+		return EVENTS
+	}
+
+	config := socketio.DefaultConfig
+	config.QueueLength = 1000
+	config.Resource = "/realtime/"
+	config.ReconnectTimeout = 1e9
+	config.Origins = []string{"*"}
+
+	EVENTS = make(chan *event, 100)
+
+	sio := socketio.NewSocketIO(&config)
+	SERVER = NewServerHandler(sio)
+
+	sio.OnConnect(func(c *socketio.Conn) {
+		SERVER.OnConnect(c)
+		EVENTS <- &event{c, eventConnect, nil}
+	})
+	sio.OnDisconnect(func(c *socketio.Conn) {
+		SERVER.OnDisconnect(c)
+		EVENTS <- &event{c, eventDisconnect, nil}
+	})
+	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) {
+		SERVER.OnMessage(c, msg)
+		EVENTS <- &event{c, eventMessage, msg}
+	})
+	go func() {
+		http.ListenAndServe(fmt.Sprintf(SERVER_ADDR), sio.ServeMux())
+		EVENTS <- &event{nil, eventCrash, nil}
+	}()
+
+	return EVENTS
+}
+
 func connectClient(t *testing.T) (*socketio.WebsocketClient, chan *message, chan bool) {
 	clientMessage := make(chan *message)
 	clientDisconnect := make(chan bool)
 
 	client := socketio.NewWebsocketClient(socketio.SIOCodec{})
+
 	client.OnMessage(func(msg socketio.Message) {
 		j, _ := msg.JSON()
-		obj, err := SERVER.jsonToData(j)
+		obj, err := NewJsonMessage(j)
 		if err != nil {
-			t.Fatalf("Client received a message that was not valid JSON: %v", j)
+			t.Fatalf("Client received a message that was not valid JSON: %v, error: %v", string(j), err)
 		}
 		clientMessage <- obj
 	})
+
 	client.OnDisconnect(func() {
 		clientDisconnect <- true
 	})
@@ -125,8 +138,7 @@ func connectClient(t *testing.T) (*socketio.WebsocketClient, chan *message, chan
 	}
 
 	// init
-	msg := newInit()
-	if err = client.Send(msg); err != nil {
+	if err = client.Send(newInitStr()); err != nil {
 		t.Fatal("Send init:", err)
 	}
 	serverEvent = <-EVENTS
@@ -135,15 +147,14 @@ func connectClient(t *testing.T) (*socketio.WebsocketClient, chan *message, chan
 	}
 
 	// subscribe
-	msg = newSub()
-	if err = client.Send(msg); err != nil {
+	if err = client.Send(newSubStr()); err != nil {
 		t.Fatal("Send subscribe:", err)
 	}
 	serverEvent = <-EVENTS
 	if serverEvent.eventType != eventMessage {
 		t.Fatalf("Expected eventMessage but got %v", serverEvent)
 	}
-	msg = <-clientMessage
+	msg := <-clientMessage
 	if msg.Data["count"].(float64) != 1 {
 		t.Fatalf("Expected subscription count to be 1 but got %v", msg.Data["count"])
 	}
@@ -151,69 +162,84 @@ func connectClient(t *testing.T) (*socketio.WebsocketClient, chan *message, chan
 	return client, clientMessage, clientDisconnect
 }
 
+// TestMessages
+// Starts a server routine, and sends messages.
+// Checks that the same number of messages are returned
+// with proper data values.
 func TestMessages(t *testing.T) {
+
 	CONFIG.DEBUG = false
 
-	numMessages := 1000
-
 	serverEvents := startServer()
-
-	time.Sleep(1e9)
 	client, clientMessage, clientDisconnect := connectClient(t)
 
-	t.Logf("Sending and receiving %d messages", numMessages)
+	t.Logf("Sending and receiving %d messages", NUM_MSGS)
 
-	iook := make(chan bool)
+	iook := new(sync.WaitGroup)
 
+	time.Sleep(1e9)
+
+	iook.Add(1)
 	go func() {
-		var err os.Error
-		var m *message
-		for i := 0; i < numMessages; i++ {
-			m = newMsg()
-			m.Data["msg"] = fmt.Sprintf("%d", i)
-			if err = client.Send(m); err != nil {
+		check := make([]string, NUM_MSGS)
+
+		for i := 0; i < NUM_MSGS; i++ {
+			val := fmt.Sprintf("%d", i)
+			msg := newMsgStr(val)
+
+			if err := client.Send(msg); err != nil {
 				t.Fatal("Send:", err)
 			}
+			check[i] = val
 		}
-		iook <- true
+
+		fmt.Println("DEBUG SEND CHECK:", check)
+
+		iook.Done()
 	}()
 
+	iook.Add(1)
 	go func() {
-		var val string
-		for i := 0; i < numMessages; i++ {
-			msg := <-clientMessage
 
-			// message data check
-			val = fmt.Sprintf("%d", i)
-			if msg.Data["msg"] != val {
-				t.Fatalf("Expected %v but got %v", val, msg.Data["msg"])
-			}
+		check := make([]string, NUM_MSGS)
+		for j := 0; j < NUM_MSGS; j++ {
+			reply := <-clientMessage
+			check[j] = reply.Data["msg"].(string)
 
-			// identity should always get passed around
-			if msg.Identity != IDENT {
-				t.Fatalf("Expected idenity to be %v but got %v", IDENT, msg.Identity)
-			}
+			/*
+				// message data check
+				val := fmt.Sprintf("%d", j)
+				if reply.Data["msg"] != val {
+					fmt.Println("DEBUG CHECK:", check)
+					t.Fatalf("Expected %v but got %v", val, reply.Data["msg"])
+				}
+
+				// identity should always get passed around
+				if reply.Identity != IDENT {
+					t.Fatalf("Expected idenity to be %v but got %v", IDENT, reply.Identity)
+				}
+			*/
 		}
-		iook <- true
+
+		fmt.Println("DEBUG RECV CHECK:", check)
+		iook.Done()
 	}()
 
+	iook.Add(1)
 	go func() {
-		for i := 0; i < numMessages; i++ {
+		for k := 0; k < NUM_MSGS; k++ {
 			serverEvent := <-serverEvents
 			if serverEvent.eventType != eventMessage {
 				t.Fatalf("Expected eventMessage but got %v", serverEvent)
 			}
 		}
-		iook <- true
+		iook.Done()
 	}()
 
-	for i := 0; i < 3; i++ {
-		<-iook
-	}
+	iook.Wait()
 
 	// unsubscribe
-	msg := newUnsub()
-	if err := client.Send(msg); err != nil {
+	if err := client.Send(newUnsubStr()); err != nil {
 		t.Fatal("Send unsubscribe:", err)
 	}
 	serverEvent := <-EVENTS
@@ -235,6 +261,8 @@ func TestMessages(t *testing.T) {
 	if serverEvent.eventType != eventDisconnect {
 		t.Fatalf("Expected disconnect event, but got %q", serverEvent)
 	}
+
+	SERVER.Shutdown()
 
 	CONFIG.DEBUG = false
 }

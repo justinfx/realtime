@@ -13,6 +13,8 @@ package main
 import (
 	"time"
 	"fmt"
+	"json"
+	"os"
 )
 
 const (
@@ -72,4 +74,15 @@ func NewErrorMessage(err string) *message {
 	msg.Error = err
 	msg.Success = false
 	return msg
+}
+
+func NewJsonMessage(raw []byte) (msg *message, err os.Error) {
+	msg = NewMessage()
+	err = json.Unmarshal(raw, msg)
+	if err != nil {
+		return nil, err
+	}
+	msg.raw = string(raw)
+
+	return msg, err
 }

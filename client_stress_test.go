@@ -2,7 +2,8 @@ package main
 
 import (
 	"testing"
-	"github.com/justinfx/go-socket.io"
+	//"github.com/justinfx/go-socket.io"
+	"socketio"
 	"strings"
 	"os"
 	"log"

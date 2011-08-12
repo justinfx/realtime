@@ -10,7 +10,6 @@ package main
 
 import (
 	"os"
-	"json"
 	"sync"
 	"fmt"
 
@@ -135,11 +134,11 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 	// first try to see if the data is recognized as valid JSON
 	raw, ok := data.JSON()
 	if !ok {
-		raw = data.Data()
+		raw = data.Bytes()
 	}
 	Debugln("Raw message from client:", c.String(), raw)
 
-	msg, err := s.jsonToData(raw)
+	msg, err := NewJsonMessage(raw)
 	if err != nil {
 		Debugln(err, "JSON:", raw, "MSG:", data.Data())
 		return
@@ -511,16 +510,6 @@ Dispatch:
 	}
 }
 
-func (s *ServerHandler) jsonToData(raw string) (msg *message, err os.Error) {
-	msg = NewMessage()
-	err = json.Unmarshal([]byte(raw), msg)
-	if err != nil {
-		return nil, err
-	}
-	msg.raw = raw
-
-	return msg, err
-}
 
 
 type Client struct {
