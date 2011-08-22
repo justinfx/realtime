@@ -136,7 +136,7 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 	if !ok {
 		raw = data.Bytes()
 	}
-	Debugln("Raw message from client:", c.String(), raw)
+	Debugln("Raw message from client:", c.String(), string(raw))
 
 	msg, err := NewJsonMessage(raw)
 	if err != nil {

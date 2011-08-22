@@ -108,9 +108,8 @@ func main() {
 	// create the socket.io server
 	config := socketio.DefaultConfig
 	config.QueueLength = CONFIG.HWM
-	config.HeartbeatInterval = 20e9
-	config.Resource = "/realtime/"
 	config.Origins = CONFIG.DOMAINS
+	config.Resource = "/realtime/"
 
 	if len(CONFIG.ALLOWED_TYPES) > 0 {
 		config.Transports = make([]socketio.Transport, len(CONFIG.ALLOWED_TYPES))
@@ -162,7 +161,7 @@ func main() {
 	// mux and server
 	mux := sio.ServeMux()
 	// this is a temporary static dir for testing
-	mux.Handle("/", http.FileServer(http.Dir("static/")))
+	mux.Handle("/", http.FileServer(http.Dir("www/")))
 
 	mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
 	mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
@@ -180,7 +179,6 @@ func main() {
 	os.Exit(0)
 
 }
-
 
 func fileExists(f string) bool {
 	_, err := os.Stat(f)

@@ -1,6 +1,6 @@
 include $(GOROOT)/src/Make.inc
 
-TARG=dist/realtime
+TARG=../realtime
 GOFILES=\
 	util.go\
 	message.go\
