@@ -1,3 +1,3 @@
 [submodule "static"]
 	path = static
-	url = justinfxgit@justinfx.com:realtime-client.git
+	url = git@justinfx.sourcerepo.com:justinfx/RealTime-Client.git
