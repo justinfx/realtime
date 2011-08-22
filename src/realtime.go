@@ -8,7 +8,8 @@ import (
 	"strings"
 	"os"
 	"os/signal"
-	"http/pprof"
+	"path/filepath"
+	//"http/pprof"
 
 	// 3rd party
 	//"github.com/justinfx/go-socket.io"
@@ -22,19 +23,18 @@ import (
 
 
 var (
-	CONFIG  *Config
+	CONFIG  Config
 	ROOT    string
 	LICENSE License
 )
 
 const (
-	CONF_NAME = "realtime.conf"
+	CONF_NAME = `realtime.conf`
 )
 
 type Config struct {
 	DEBUG         bool
 	PORT          int
-	FLASHPORT     int
 	HWM           int
 	DOMAINS       []string
 	ALLOWED_TYPES []string
@@ -42,20 +42,22 @@ type Config struct {
 
 func init() {
 
-	CONFIG = &Config{
+	CONFIG = Config{
 		DEBUG:         false,
 		DOMAINS:       []string{"*"},
 		ALLOWED_TYPES: []string{},
 		PORT:          8001,
-		FLASHPORT:     843,
 		HWM:           5000,
 	}
 
 	var err os.Error
 	LICENSE, err = NewLicense()
 	if err != nil {
-		fmt.Println("Warning: No valid license keys were found. Only localhost connections are permitted.")
+		log.Println("Warning: No valid license keys were found. Only localhost connections are permitted.")
 	}
+
+	root, _ := filepath.Split(os.Args[0])
+	ROOT, _ = filepath.Abs(root)
 
 }
 
@@ -153,7 +155,7 @@ func main() {
 
 	// start the flash server
 	go func() {
-		if err := sio.ListenAndServeFlashPolicy(fmt.Sprintf(":%v", CONFIG.FLASHPORT)); err != nil {
+		if err := sio.ListenAndServeFlashPolicy(fmt.Sprintf(":%v", 843)); err != nil {
 			log.Println("Warning: Could not start flash policy server", err)
 		}
 	}()
@@ -161,12 +163,14 @@ func main() {
 	// mux and server
 	mux := sio.ServeMux()
 	// this is a temporary static dir for testing
-	mux.Handle("/", http.FileServer(http.Dir("www/")))
+	mux.Handle("/", http.FileServer(http.Dir(filepath.Join(ROOT, "www/"))))
 
-	mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
-	mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
-	mux.Handle("/debug/pprof/heap", http.HandlerFunc(pprof.Heap))
-	mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	/*
+		mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+		mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+		mux.Handle("/debug/pprof/heap", http.HandlerFunc(pprof.Heap))
+		mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	*/
 
 	// start server
 	log.Printf("RealTime server starting. Accepting connections on port :%v", CONFIG.PORT)

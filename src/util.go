@@ -21,11 +21,6 @@ const (
 	LOCALHOST = `localhost`
 )
 
-func init() {
-	root, _ := filepath.Split(os.Args[0])
-	ROOT, _ = filepath.Abs(root)
-}
-
 // Looks for a realtime.conf file in either the current
 // directory, an etc/ subdir, or an etc/ directory one up
 // from the current directory

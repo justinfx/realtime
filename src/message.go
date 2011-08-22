@@ -9,7 +9,6 @@ package main
 	client.
 */
 
-
 import (
 	"time"
 	"fmt"
@@ -21,7 +20,6 @@ const (
 	CommandType = iota
 	MessageType
 )
-
 
 type message struct {
 	Type      string                 `json:"type"`

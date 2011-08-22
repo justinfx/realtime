@@ -1,3 +1,6 @@
 [submodule "static"]
 	path = static
-	url = git@justinfx.sourcerepo.com:justinfx/RealTime-Client.git
+	url = git@repo.justinfx.com:justinfx/RealTime-Client.git
+[submodule "lib/supervisor"]
+	path = lib/supervisor
+	url = https://github.com/Supervisor/supervisor.git

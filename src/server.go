@@ -7,7 +7,6 @@ package main
 	and handles all communications between connected clients.
 */
 
-
 import (
 	"os"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	//"github.com/madari/go-socket.io"
 	"socketio" // dev only
 )
-
 
 type ServerHandler struct {
 	Sio *socketio.SocketIO
@@ -34,7 +32,6 @@ type ServerHandler struct {
 
 	identsLock, clientsLock sync.RWMutex
 }
-
 
 func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 
@@ -71,16 +68,16 @@ func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 // When a client disconnected, remove their Client
 // object reference
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
-	
+
 	wg := &sync.WaitGroup{}
-	
+
 	s.clientsLock.RLock()
 	client := s.clients[c.String()]
 	s.clientsLock.RUnlock()
 
 	client.lock.RLock()
 	identity := client.Identity
-	
+
 	if len(client.Conns) <= 1 {
 		Debugln("OnDisconnect(): Client is last in group. Unsubscribing", client.Channels)
 
@@ -112,9 +109,9 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	} else {
 		client.lock.RUnlock()
 	}
-	
+
 	wg.Wait()
-	
+
 	client.RemoveConn(c)
 
 	s.clientsLock.Lock()
@@ -241,7 +238,6 @@ func (s *ServerHandler) publish(c *socketio.Conn, msg *message) (err os.Error) {
 	return
 }
 
-
 func (s *ServerHandler) subscribeCmd(req *DispatchReq) {
 	Debugln("subscribeCmd():", req.Conn, req.Msg.raw)
 
@@ -250,7 +246,7 @@ func (s *ServerHandler) subscribeCmd(req *DispatchReq) {
 		<-req.done
 	}
 
-	return 
+	return
 }
 
 func (s *ServerHandler) unsubscribeCmd(req *DispatchReq) {
@@ -260,18 +256,18 @@ func (s *ServerHandler) unsubscribeCmd(req *DispatchReq) {
 	if req.Wait {
 		<-req.done
 	}
-	
-	return 
+
+	return
 }
 
 // A client should first send an init command to establish their
 // identity, and optional batch subscribe to any channels
 func (s *ServerHandler) initCmd(req *DispatchReq) {
 	Debugln("initCmd():", req.Conn, req.Msg.raw)
-	
+
 	c := req.Conn
 	msg := req.Msg
-	
+
 	s.clientsLock.Lock()
 	defer s.clientsLock.Unlock()
 
@@ -329,7 +325,6 @@ func (s *ServerHandler) initCmd(req *DispatchReq) {
 
 	return
 }
-
 
 func (s *ServerHandler) Shutdown() {
 	s.quitting = true
@@ -510,8 +505,6 @@ Dispatch:
 	}
 }
 
-
-
 type Client struct {
 	Identity string
 	Conns    []*socketio.Conn
@@ -519,7 +512,6 @@ type Client struct {
 	hasInit  bool
 	lock     sync.RWMutex
 }
-
 
 func (c *Client) String() string {
 	return fmt.Sprintf("Client{Identity: %v, #Conn: %d, Conn: %v}", c.Identity, len(c.Conns), c.Conns)
@@ -579,17 +571,16 @@ func (c *Client) SetInit(val bool) {
 }
 
 type DispatchReq struct {
-	Msg   *message
+	Msg  *message
 	Wait bool
-	Conn  *socketio.Conn
+	Conn *socketio.Conn
 	done chan bool
-
 }
 
 func NewDispatchReq(c *socketio.Conn, m *message, wait bool) *DispatchReq {
 	return &DispatchReq{
-		Msg:   m,
-		Conn:  c,
+		Msg:  m,
+		Conn: c,
 		Wait: wait,
 		done: make(chan bool),
 	}
@@ -597,6 +588,6 @@ func NewDispatchReq(c *socketio.Conn, m *message, wait bool) *DispatchReq {
 
 func (d *DispatchReq) SetDone() {
 	if d.Wait {
-		d.done<-true
+		d.done <- true
 	}
-} 
+}
