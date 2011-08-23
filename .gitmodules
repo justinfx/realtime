@@ -3,4 +3,4 @@
 	url = git@repo.justinfx.com:justinfx/RealTime-Client.git
 [submodule "lib/supervisor"]
 	path = lib/supervisor
-	url = https://github.com/Supervisor/supervisor.git
+	url = git@repo.justinfx.com:justinfx/RealTime-Supervisor.git 
