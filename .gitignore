@@ -5,3 +5,6 @@ _*
 build
 dist
 realtime
+*.gz
+*.zip
+

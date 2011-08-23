@@ -10,9 +10,16 @@ GOFILES=\
     
 include $(GOROOT)/src/Make.cmd
 
-.PHONY: gofmt, test
+.PHONY: gofmt, test, export
 gofmt:
 	gofmt -w $(GOFILES)
 
 test:
 	gotest -test.v
+
+OUT=../realtime_export.tar.gz
+
+export: $(TARG)
+	-rm ../log/* 
+	-rm ../run/*
+	cd .. && git-archive-all $(OUT) --extra realtime --extra log/ --extra run/ -v
