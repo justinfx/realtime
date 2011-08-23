@@ -17,7 +17,7 @@ gofmt:
 test:
 	gotest -test.v
 
-OUT=../realtime_export.tar.gz
+OUT=realtime_export.tar.gz
 
 export: $(TARG)
 	-rm ../log/* 
