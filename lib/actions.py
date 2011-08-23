@@ -9,6 +9,7 @@ CONF = os.path.join(ROOT, "etc/supervisord.conf")
 SUPERD = os.path.join(ROOT, "supervisord")
 SUPERCTL = os.path.join(ROOT, "supervisorctl")
 
+os.environ["PYTHONPATH"] = ':'.join([os.environ["PYTHONPATH"], os.path.join(THIS, "supervisor")])
 
 
 def start():
@@ -48,3 +49,5 @@ def status(quiet=False):
     ret = os.system(cmd)
     if ret != 0:
         raise Exception('Error getting status of RealTime Server')
+        
+
