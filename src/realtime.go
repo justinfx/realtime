@@ -111,6 +111,7 @@ func main() {
 	config := socketio.DefaultConfig
 	config.QueueLength = CONFIG.HWM
 	config.Origins = CONFIG.DOMAINS
+	config.ReconnectTimeout = 5e9
 	config.Resource = "/realtime/"
 
 	if len(CONFIG.ALLOWED_TYPES) > 0 {
