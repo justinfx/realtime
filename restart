@@ -1,0 +1,13 @@
+#!/usr/bin/env python
+
+import sys
+import actions
+
+print "Restarting RealTime server"
+try:
+    actions.restart(quiet=True)    
+except Exception, e:
+    print str(e)
+    sys.exit(255)
+
+sys.exit(0)
