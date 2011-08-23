@@ -9,14 +9,16 @@ CONF = os.path.join(ROOT, "etc/supervisord.conf")
 SUPERD = os.path.join(ROOT, "supervisord")
 SUPERCTL = os.path.join(ROOT, "supervisorctl")
 
+
+
 def start():
-    cmd = "%s -c %s" % (SUPERD, CONF)
+    cmd = "cd %s && %s -c %s" % (ROOT, SUPERD, CONF)
     ret = os.system(cmd)
     if ret != 0:
         raise Exception('Error starting RealTime Server')
     
 def stop(quiet=False):
-    cmd = "%s -c %s shutdown" % (SUPERCTL, CONF)
+    cmd = "cd %s && %s -c %s shutdown" % (ROOT, SUPERCTL, CONF)
     if quiet:
         cmd = "%s &> /dev/null" % cmd
     ret = os.system(cmd)
@@ -40,7 +42,7 @@ def restart(quiet=False):
     
     
 def status(quiet=False):
-    cmd = "%s -c %s status" % (SUPERCTL, CONF)
+    cmd = "cd %s && %s -c %s status" % (ROOT, SUPERCTL, CONF)
     if quiet:
         cmd = "%s &> /dev/null" % cmd
     ret = os.system(cmd)
