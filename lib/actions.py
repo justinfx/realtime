@@ -9,7 +9,7 @@ CONF = os.path.join(ROOT, "etc/supervisord.conf")
 SUPERD = os.path.join(ROOT, "supervisord")
 SUPERCTL = os.path.join(ROOT, "supervisorctl")
 
-os.environ["PYTHONPATH"] = ':'.join([os.environ["PYTHONPATH"], os.path.join(THIS, "supervisor")])
+os.environ["PYTHONPATH"] = ':'.join([os.environ,get("PYTHONPATH"), os.path.join(THIS, "supervisor")])
 
 
 def start():
