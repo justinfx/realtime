@@ -12,9 +12,9 @@ import (
 	//"http/pprof"
 
 	// 3rd party
-	//"github.com/justinfx/go-socket.io"
+	"github.com/justinfx/go-socket.io"
 	//"github.com/madari/go-socket.io"
-	"socketio" // dev only
+	//"socketio" // dev only
 )
 
 //
