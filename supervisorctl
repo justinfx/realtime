@@ -1,4 +1,4 @@
 #!/bin/bash
 
 DIR="$( cd -P "$( dirname "$0" )" && pwd )"
-cd $DIR && ./lib/supervisor/supervisor/supervisorctl.py "$@"
+cd $DIR && ${DIR}/lib/supervisor/supervisor/supervisorctl.py "$@"
