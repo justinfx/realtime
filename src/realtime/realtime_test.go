@@ -2,8 +2,6 @@ package main
 
 import (
 	"socketio"
-	//"github.com/justinfx/go-socket.io"
-	//"github.com/madari/go-socket.io"
 	"fmt"
 	"http"
 	"testing"
@@ -12,9 +10,10 @@ import (
 )
 
 const (
-	SERVER_ADDR  = "localhost:9999"
+	SERVER_ADDR  = "localhost"
+	PORT         = "9999"
 	IDENT        = "TEST1"
-	NUM_MSGS     = 5
+	NUM_MSGS     = 1000
 	eventConnect = iota
 	eventDisconnect
 	eventMessage
@@ -22,7 +21,7 @@ const (
 )
 
 var EVENTS chan *event
-var SERVER *ServerHandler
+var _SERVER *ServerHandler
 
 type event struct {
 	conn      *socketio.Conn
@@ -72,7 +71,7 @@ func newMsgStr(msg string) string {
 
 func startServer() <-chan *event {
 
-	if SERVER != nil && EVENTS != nil {
+	if _SERVER != nil && EVENTS != nil {
 		return EVENTS
 	}
 
@@ -85,22 +84,22 @@ func startServer() <-chan *event {
 	EVENTS = make(chan *event, 100)
 
 	sio := socketio.NewSocketIO(&config)
-	SERVER = NewServerHandler(sio)
+	_SERVER = NewServerHandler(sio)
 
 	sio.OnConnect(func(c *socketio.Conn) {
-		SERVER.OnConnect(c)
+		_SERVER.OnConnect(c)
 		EVENTS <- &event{c, eventConnect, nil}
 	})
 	sio.OnDisconnect(func(c *socketio.Conn) {
-		SERVER.OnDisconnect(c)
+		_SERVER.OnDisconnect(c)
 		EVENTS <- &event{c, eventDisconnect, nil}
 	})
 	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) {
-		SERVER.OnMessage(c, msg)
+		_SERVER.OnMessage(c, msg)
 		EVENTS <- &event{c, eventMessage, msg}
 	})
 	go func() {
-		http.ListenAndServe(fmt.Sprintf(SERVER_ADDR), sio.ServeMux())
+		http.ListenAndServe(fmt.Sprintf("%s:%s", SERVER_ADDR, PORT), sio.ServeMux())
 		EVENTS <- &event{nil, eventCrash, nil}
 	}()
 
@@ -108,10 +107,20 @@ func startServer() <-chan *event {
 }
 
 func connectClient(t *testing.T) (*socketio.WebsocketClient, chan *message, chan bool) {
+
+	// license test
+	client := socketio.NewWebsocketClient(socketio.SIOCodec{})
+	err := client.Dial("ws://127.0.0.1:"+PORT+"/realtime/websocket", "http://"+SERVER_ADDR+":"+PORT+"/")
+	if err == nil {
+		t.Fatal("Expected a license failure when connecting to 127.0.0.1")
+	}
+	client.Close()
+
+	// really connect	
 	clientMessage := make(chan *message)
 	clientDisconnect := make(chan bool)
 
-	client := socketio.NewWebsocketClient(socketio.SIOCodec{})
+	client = socketio.NewWebsocketClient(socketio.SIOCodec{})
 
 	client.OnMessage(func(msg socketio.Message) {
 		j, _ := msg.JSON()
@@ -126,7 +135,7 @@ func connectClient(t *testing.T) (*socketio.WebsocketClient, chan *message, chan
 		clientDisconnect <- true
 	})
 
-	err := client.Dial("ws://"+SERVER_ADDR+"/realtime/websocket", "http://"+SERVER_ADDR+"/")
+	err = client.Dial("ws://"+SERVER_ADDR+":"+PORT+"/realtime/websocket", "http://"+SERVER_ADDR+":"+PORT+"/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,8 +190,6 @@ func TestMessages(t *testing.T) {
 
 	iook.Add(1)
 	go func() {
-		check := make([]string, NUM_MSGS)
-
 		for i := 0; i < NUM_MSGS; i++ {
 			val := fmt.Sprintf("%d", i)
 			msg := newMsgStr(val)
@@ -190,38 +197,28 @@ func TestMessages(t *testing.T) {
 			if err := client.Send(msg); err != nil {
 				t.Fatal("Send:", err)
 			}
-			check[i] = val
 		}
-
-		fmt.Println("DEBUG SEND CHECK:", check)
 
 		iook.Done()
 	}()
 
 	iook.Add(1)
 	go func() {
-
-		check := make([]string, NUM_MSGS)
 		for j := 0; j < NUM_MSGS; j++ {
 			reply := <-clientMessage
-			check[j] = reply.Data["msg"].(string)
 
-			/*
-				// message data check
-				val := fmt.Sprintf("%d", j)
-				if reply.Data["msg"] != val {
-					fmt.Println("DEBUG CHECK:", check)
-					t.Fatalf("Expected %v but got %v", val, reply.Data["msg"])
-				}
+			// message data check
+			val := fmt.Sprintf("%d", j)
+			if reply.Data["msg"] != val {
+				t.Fatalf("Expected %v but got %v", val, reply.Data["msg"])
+			}
 
-				// identity should always get passed around
-				if reply.Identity != IDENT {
-					t.Fatalf("Expected idenity to be %v but got %v", IDENT, reply.Identity)
-				}
-			*/
+			// identity should always get passed around
+			if reply.Identity != IDENT {
+				t.Fatalf("Expected idenity to be %v but got %v", IDENT, reply.Identity)
+			}
 		}
 
-		fmt.Println("DEBUG RECV CHECK:", check)
 		iook.Done()
 	}()
 
@@ -262,7 +259,7 @@ func TestMessages(t *testing.T) {
 		t.Fatalf("Expected disconnect event, but got %q", serverEvent)
 	}
 
-	SERVER.Shutdown()
+	_SERVER.Shutdown()
 
 	CONFIG.DEBUG = false
 }

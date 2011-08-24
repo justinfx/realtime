@@ -6,8 +6,8 @@ THIS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(THIS)
 CONF = os.path.join(ROOT, "etc/supervisord.conf")
 
-SUPERD = os.path.join(ROOT, "supervisord")
-SUPERCTL = os.path.join(ROOT, "supervisorctl")
+SUPERD = os.path.join(ROOT, "bin/realtimed")
+SUPERCTL = os.path.join(ROOT, "bin/realtimectl")
 
 os.environ["PYTHONPATH"] = ':'.join([os.environ.get("PYTHONPATH"), os.path.join(THIS, "supervisor")])
 

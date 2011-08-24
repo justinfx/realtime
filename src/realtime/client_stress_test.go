@@ -2,7 +2,6 @@ package main
 
 import (
 	"testing"
-	//"github.com/justinfx/go-socket.io"
 	"socketio"
 	"strings"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"flag"
 	"strconv"
 )
-
 
 func BenchmarkStressTest(b *testing.B) {
 

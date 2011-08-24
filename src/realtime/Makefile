@@ -1,9 +1,12 @@
 include $(GOROOT)/src/Make.inc
 
-TARG=../realtime
+PROJ_ROOT=../../
+
+TARG=$(PROJ_ROOT)realtime
 GOFILES=\
 	util.go\
 	message.go\
+	api.go\
 	server.go\
 	realtime.go\
 
@@ -11,8 +14,9 @@ GOFILES=\
 include $(GOROOT)/src/Make.cmd
 
 .PHONY: gofmt, test, export
+
 gofmt:
-	gofmt -w $(GOFILES)
+	gofmt -w *.go
 
 test:
 	gotest -test.v
@@ -20,6 +24,6 @@ test:
 OUT=realtime_export.tar.gz
 
 export: $(TARG)
-	-rm ../log/* 
-	-rm ../run/*
-	cd .. && git-archive-all $(OUT) --extra realtime --extra log/ --extra run/ -v
+	-rm $(PROJ_ROOT)log/* 
+	-rm $(PROJ_ROOT)run/*
+	cd $(PROJ_ROOT) && git-archive-all $(OUT) --extra realtime --extra log/ --extra run/ -v

@@ -12,9 +12,7 @@ import (
 	//"http/pprof"
 
 	// 3rd party
-	"github.com/justinfx/go-socket.io"
-	//"github.com/madari/go-socket.io"
-	//"socketio" // dev only
+	"socketio" 
 )
 
 //
@@ -23,6 +21,7 @@ import (
 
 
 var (
+	SERVER  *ServerHandler
 	CONFIG  Config
 	ROOT    string
 	LICENSE License
@@ -135,11 +134,11 @@ func main() {
 	}
 
 	sio := socketio.NewSocketIO(&config)
-	handler := NewServerHandler(sio)
+	SERVER = NewServerHandler(sio)
 
-	sio.OnConnect(func(c *socketio.Conn) { handler.OnConnect(c) })
-	sio.OnDisconnect(func(c *socketio.Conn) { handler.OnDisconnect(c) })
-	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) { handler.OnMessage(c, msg) })
+	sio.OnConnect(func(c *socketio.Conn) { SERVER.OnConnect(c) })
+	sio.OnDisconnect(func(c *socketio.Conn) { SERVER.OnDisconnect(c) })
+	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) { SERVER.OnMessage(c, msg) })
 	sio.SetAuthorization(func(r *http.Request) bool { return LICENSE.CheckHttpRequest(r) })
 
 	// start a signal handler
@@ -148,7 +147,7 @@ func main() {
 			switch sig.(os.UnixSignal) {
 			case os.SIGTERM, os.SIGINT:
 				log.Println("Server shutting down.")
-				handler.Shutdown()
+				SERVER.Shutdown()
 				os.Exit(0)
 			}
 		}
@@ -163,6 +162,8 @@ func main() {
 
 	// mux and server
 	mux := sio.ServeMux()
+	mux.Handle("/api/publish", http.HandlerFunc(HandlePostAPIPublish))
+
 	// this is a temporary static dir for testing
 	mux.Handle("/", http.FileServer(http.Dir(filepath.Join(ROOT, "www/"))))
 

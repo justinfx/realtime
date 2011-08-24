@@ -4,3 +4,9 @@
 [submodule "lib/supervisor"]
 	path = lib/supervisor
 	url = git@repo.justinfx.com:justinfx/RealTime-Supervisor.git 
+[submodule "src/socket.io"]
+	path = src/socket.io
+	url = git://github.com/justinfx/go-socket.io.git
+[submodule "src/socketio"]
+	path = src/socketio
+	url = git://github.com/justinfx/go-socket.io.git
