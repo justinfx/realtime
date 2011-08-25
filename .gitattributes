@@ -1,6 +1,5 @@
+.git*	export-ignore
 src/* 	export-ignore
-src/socketio/* 	export-ignore
-src/realtime/* 	export-ignore
 log/*	export-ignore
 run/*	export-ignore
 
