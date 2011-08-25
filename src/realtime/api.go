@@ -10,11 +10,16 @@ import (
 // via a POST request. Request Body must be a valid JSON message
 // structure.
 func HandlePostAPIPublish(writer http.ResponseWriter, req *http.Request) {
-
-	if !LICENSE.CheckHttpRequest(req) {
+	
+	if req.Method != "POST"{
+		writer.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	
+	} else if !LICENSE.CheckHttpRequest(req) {
 		writer.WriteHeader(http.StatusUnauthorized)
 		writer.Write([]byte("Error: Domain name origin is not licensed for this server\n"))
 		return
+	
 	} else if req.ContentLength == -1 {
 		writer.WriteHeader(http.StatusLengthRequired)
 		return
@@ -33,10 +38,10 @@ func HandlePostAPIPublish(writer http.ResponseWriter, req *http.Request) {
 
 	msg, err := NewJsonMessage(buf)
 	if err != nil {
-		Debugf("api/HandlePostAPIReq: Bad message format in POST request: (message) %v, (error) %v",
+		Debugf("api/HandlePostAPIReq: Bad JSON format in POST request: (message) %v, (error) %v",
 			string(buf), err)
 		writer.WriteHeader(http.StatusBadRequest)
-		writer.Write([]byte(fmt.Sprintf("Error: %v\n", err)))
+		writer.Write([]byte("Error: Bad JSON format in POST request\n"))
 		return
 	}
 
