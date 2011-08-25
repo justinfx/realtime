@@ -26,4 +26,4 @@ OUT=realtime_export.tar.gz
 export: $(TARG)
 	-rm $(PROJ_ROOT)log/* 
 	-rm $(PROJ_ROOT)run/*
-	cd $(PROJ_ROOT) && git-archive-all $(OUT) --extra realtime --extra log/ --extra run/ -v
+	cd $(PROJ_ROOT) && git-archive-all $(OUT) --extra realtime --extra log/ --extra run/ --prefix RealTime/ -v
