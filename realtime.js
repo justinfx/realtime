@@ -63,6 +63,7 @@ var RT = {
 		
 		loadScript(options.socketURL || RT.options.socketURL,function() {
 		//loadScript("io.js",function() {
+		    WEB_SOCKET_SWF_LOCATION = 'http://cdn.socket.io/stable/WebSocketMain.swf';
 			var connected = RT._connect(identity,options,callback);
 	    });    
 		
