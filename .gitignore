@@ -7,4 +7,4 @@ dist
 realtime
 *.gz
 *.zip
-
+hash.txt
