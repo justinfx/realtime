@@ -2,4 +2,9 @@
 
 DIR="$( cd -P "$( dirname "$0" )" && pwd )"
 
-cd $DIR && gb -b -v && cp -v ./bin/realtime ../
+CLEAN=""
+if [[ $1 == "clean" ]]; then
+    CLEAN="-c"
+fi
+
+cd $DIR && gb $CLEAN -b -v && cp -v ./bin/realtime ../
