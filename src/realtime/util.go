@@ -11,6 +11,7 @@ import (
 	"crypto/sha1"
 
 	"github.com/kless/goconfig/config"
+	"url"
 )
 
 var (
@@ -126,7 +127,7 @@ func (l License) IsValid(lic string) bool {
 
 func (l License) CheckHttpRequest(req *http.Request) bool {
 	var (
-		url          *http.URL
+		url_         *http.URL
 		err          os.Error
 		origin, host string
 	)
@@ -134,9 +135,9 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 	origin = req.Header.Get("Origin")
 
 	if origin != "" {
-		url, err = http.ParseURL(origin)
-		if err == nil && url.Host != "" {
-			origin = strings.SplitN(url.Host, ":", 2)[0]
+		url_, err = url.Parse(origin)
+		if err == nil && url_.Host != "" {
+			origin = strings.SplitN(url_.Host, ":", 2)[0]
 		}
 	}
 
