@@ -9,9 +9,8 @@ import (
 	"http"
 	"strings"
 	"crypto/sha1"
-
-	"github.com/kless/goconfig/config"
 	"url"
+	"github.com/kless/goconfig/config"
 )
 
 var (
@@ -127,7 +126,7 @@ func (l License) IsValid(lic string) bool {
 
 func (l License) CheckHttpRequest(req *http.Request) bool {
 	var (
-		url_         *http.URL
+		url_         *url.URL
 		err          os.Error
 		origin, host string
 	)
