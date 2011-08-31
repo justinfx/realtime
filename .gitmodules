@@ -10,3 +10,6 @@
 [submodule "src/socketio"]
 	path = src/socketio
 	url = git://github.com/justinfx/go-socket.io.git
+[submodule "lib/meld3"]
+	path = lib/meld3
+	url = git://github.com/Supervisor/meld3.git
