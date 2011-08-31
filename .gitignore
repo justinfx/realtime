@@ -7,4 +7,5 @@ dist
 realtime
 *.gz
 *.zip
+*.pyc
 hash.txt
