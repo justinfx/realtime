@@ -41,6 +41,9 @@ type Config struct {
 
 func init() {
 
+	root, _ := filepath.Split(os.Args[0])
+	ROOT, _ = filepath.Abs(root)
+	
 	CONFIG = Config{
 		DEBUG:         false,
 		DOMAINS:       []string{"*"},
@@ -54,10 +57,6 @@ func init() {
 	if err != nil {
 		log.Println("Warning: No valid license keys were found. Only localhost connections are permitted.")
 	}
-
-	root, _ := filepath.Split(os.Args[0])
-	ROOT, _ = filepath.Abs(root)
-
 }
 
 //
