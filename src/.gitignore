@@ -1,3 +1,7 @@
-!build
-bin
+*.6
+_.*
+*.out
+*.pyc
 _obj
+bin
+!realtime

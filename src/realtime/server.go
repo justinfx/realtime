@@ -66,7 +66,13 @@ func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 // When a client disconnected, remove their Client
 // object reference
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
-
+	defer func() {
+		if r := recover(); r != nil {
+			Debugln("OnDisconnect(): Recovered from disconnecting client:", r)
+			return
+		}
+	}()
+	
 	wg := &sync.WaitGroup{}
 
 	s.clientsLock.RLock()
