@@ -137,6 +137,9 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 		url_, err = url.Parse(origin)
 		if err == nil && url_.Host != "" {
 			origin = strings.SplitN(url_.Host, ":", 2)[0]
+			if strings.Count(origin, ".") >= 2 {
+				origin = strings.SplitN(origin, ".", 2)[1]
+			}
 		}
 	}
 
