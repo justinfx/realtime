@@ -10,16 +10,16 @@ import (
 // via a POST request. Request Body must be a valid JSON message
 // structure.
 func HandlePostAPIPublish(writer http.ResponseWriter, req *http.Request) {
-	
-	if req.Method != "POST"{
+
+	if req.Method != "POST" {
 		writer.WriteHeader(http.StatusMethodNotAllowed)
 		return
-	
+
 	} else if !LICENSE.CheckHttpRequest(req) {
 		writer.WriteHeader(http.StatusUnauthorized)
 		writer.Write([]byte("Error: Domain name origin is not licensed for this server\n"))
 		return
-	
+
 	} else if req.ContentLength == -1 {
 		writer.WriteHeader(http.StatusLengthRequired)
 		return

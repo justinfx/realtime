@@ -12,7 +12,7 @@ import (
 	//"http/pprof"
 
 	// 3rd party
-	"socketio" 
+	"socketio"
 )
 
 //
@@ -43,7 +43,7 @@ func init() {
 
 	root, _ := filepath.Split(os.Args[0])
 	ROOT, _ = filepath.Abs(root)
-	
+
 	CONFIG = Config{
 		DEBUG:         false,
 		DOMAINS:       []string{"*"},

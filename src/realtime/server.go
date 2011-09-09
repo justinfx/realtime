@@ -72,7 +72,7 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 			return
 		}
 	}()
-	
+
 	wg := &sync.WaitGroup{}
 
 	s.clientsLock.RLock()
@@ -354,45 +354,39 @@ func (s *ServerHandler) dispatchMessages() {
 	var (
 		req     *DispatchReq
 		msg     *message
-		ok      bool
 		members []*Client
 	)
 
-	for {
-		select {
-		case req, ok = <-s.msgChannel:
-			if !ok {
-				s.quit <- true
-				return
-			}
-			msg = req.Msg
+	for req = range s.msgChannel {
 
-			if msg.Channel == "" {
-				req.SetDone()
-				continue
-			}
+		msg = req.Msg
 
-			members = s.subs[msg.Channel]
-			if members == nil || len(members) == 0 {
-				req.SetDone()
-				continue
-			}
+		if msg.Channel == "" {
+			req.SetDone()
+			continue
+		}
 
-			//Debugln("startDispatcher(): Sending message w/ data - ", msg.Data)
+		members = s.subs[msg.Channel]
+		if members == nil || len(members) == 0 {
+			req.SetDone()
+			continue
+		}
 
-			for i, _ := range members {
-				for j := 0; j < len(members[i].Conns); {
-					if err := members[i].Conns[j].Send(msg); err != nil {
-						members[i].Conns = append(members[i].Conns[:j], members[i].Conns[j+1:]...)
-						//s.subs[msg.Channel] = members
-					} else {
-						j++
-					}
+		//Debugln("startDispatcher(): Sending message w/ data - ", msg.Data)
+
+		for i, _ := range members {
+			for j := 0; j < len(members[i].Conns); {
+				if err := members[i].Conns[j].Send(msg); err != nil {
+					members[i].Conns = append(members[i].Conns[:j], members[i].Conns[j+1:]...)
+					//s.subs[msg.Channel] = members
+				} else {
+					j++
 				}
 			}
-			req.SetDone()
 		}
+		req.SetDone()
 	}
+	s.quit <- true
 }
 
 func (s *ServerHandler) dispatchServices() {
@@ -405,108 +399,103 @@ func (s *ServerHandler) dispatchServices() {
 		req        *DispatchReq
 		msg        *message
 		reply      *message
-		ok         bool
 		client     *Client
 		clientTest *Client
 		members    []*Client
+		ok         bool
 	)
 
 Dispatch:
-	for {
-		select {
-		case req, ok = <-s.srvcChannel:
-			if !ok {
-				s.quit <- true
-				return
-			}
-			msg = req.Msg
+	for req = range s.srvcChannel {
 
-			if msg.Channel == "" {
-				req.SetDone()
-				continue
-			}
+		msg = req.Msg
 
-			members, ok = s.subs[msg.Channel]
-			if !ok {
-				members = []*Client{}
-			}
+		if msg.Channel == "" {
+			req.SetDone()
+			continue
+		}
 
-			switch msg.Data["command"].(string) {
+		members, ok = s.subs[msg.Channel]
+		if !ok {
+			members = []*Client{}
+		}
 
-			case "subscribe":
+		switch msg.Data["command"].(string) {
 
-				s.clientsLock.RLock()
-				client = s.clients[req.Conn.String()]
-				s.clientsLock.RUnlock()
+		case "subscribe":
 
-				for _, clientTest = range members {
-					if clientTest == client {
-						err := os.NewError("client already subscribed to channel")
-						Debugln(err)
-						req.SetDone()
-						continue Dispatch
-					}
+			s.clientsLock.RLock()
+			client = s.clients[req.Conn.String()]
+			s.clientsLock.RUnlock()
+
+			for _, clientTest = range members {
+				if clientTest == client {
+					err := os.NewError("client already subscribed to channel")
+					Debugln(err)
+					req.SetDone()
+					continue Dispatch
 				}
-				members = append(members, client)
-				s.subs[msg.Channel] = members
+			}
+			members = append(members, client)
+			s.subs[msg.Channel] = members
 
+			reply = NewCommand()
+			reply.Channel = msg.Channel
+			reply.Identity = msg.Identity
+			reply.Data["command"] = "onSubscribe"
+			reply.Data["options"] = msg.Data["options"]
+			reply.Data["count"] = len(members)
+
+			s.publish(req.Conn, reply)
+
+			client.AddChannel(msg.Channel)
+
+			Debugf("dispatchServices(): subscribed %v => \"%v\"", client, msg.Channel)
+
+		case "unsubscribe":
+
+			ok = false
+
+			s.clientsLock.RLock()
+			client = s.clients[req.Conn.String()]
+			s.clientsLock.RUnlock()
+
+			for i := 0; i < len(members); {
+				clientTest = members[i]
+				//Debugf("dispatchServices(): %v == %v ? %v", clientTest, client, clientTest==client)
+				if clientTest == client {
+					members = append(members[:i], members[i+1:]...)
+					s.subs[msg.Channel] = members
+					ok = true
+					Debugf("dispatchServices(): unsubscribing %v from %v", req.Conn, msg.Channel)
+					break
+				} else {
+					i++
+				}
+			}
+
+			if ok {
 				reply = NewCommand()
-				reply.Channel = msg.Channel
 				reply.Identity = msg.Identity
-				reply.Data["command"] = "onSubscribe"
+				reply.Channel = msg.Channel
+				reply.Data["command"] = "onUnsubscribe"
 				reply.Data["options"] = msg.Data["options"]
-				reply.Data["count"] = len(members)
+				reply.Data["count"] = len(s.subs[msg.Channel])
 
 				s.publish(req.Conn, reply)
 
-				client.AddChannel(msg.Channel)
+				client.RemoveChannel(msg.Channel)
 
-				Debugf("dispatchServices(): subscribed %v => \"%v\"", client, msg.Channel)
-
-			case "unsubscribe":
-
-				ok = false
-
-				s.clientsLock.RLock()
-				client = s.clients[req.Conn.String()]
-				s.clientsLock.RUnlock()
-
-				for i := 0; i < len(members); {
-					clientTest = members[i]
-					//Debugf("dispatchServices(): %v == %v ? %v", clientTest, client, clientTest==client)
-					if clientTest == client {
-						members = append(members[:i], members[i+1:]...)
-						s.subs[msg.Channel] = members
-						ok = true
-						Debugf("dispatchServices(): unsubscribing %v from %v", req.Conn, msg.Channel)
-						break
-					} else {
-						i++
-					}
-				}
-
-				if ok {
-					reply = NewCommand()
-					reply.Identity = msg.Identity
-					reply.Channel = msg.Channel
-					reply.Data["command"] = "onUnsubscribe"
-					reply.Data["options"] = msg.Data["options"]
-					reply.Data["count"] = len(s.subs[msg.Channel])
-
-					s.publish(req.Conn, reply)
-
-					client.RemoveChannel(msg.Channel)
-
-				} else {
-					err := os.NewError("client was not subscribed to channel")
-					Debugln(err)
-					req.SetDone()
-					continue
-				}
+			} else {
+				err := os.NewError("client was not subscribed to channel")
+				Debugln(err)
+				req.SetDone()
+				continue
 			}
-			req.SetDone()
 		}
+		req.SetDone()
 	}
+	s.quit <- true
 }
 
 type Client struct {
@@ -582,16 +571,23 @@ type DispatchReq struct {
 }
 
 func NewDispatchReq(c *socketio.Conn, m *message, wait bool) *DispatchReq {
-	return &DispatchReq{
+
+	req := &DispatchReq{
 		Msg:  m,
 		Conn: c,
 		Wait: wait,
-		done: make(chan bool),
 	}
+
+	if wait {
+		req.done = make(chan bool)
+	}
+
+	return req
 }
 
 func (d *DispatchReq) SetDone() {
 	if d.Wait {
 		d.done <- true
+		close(d.done)
 	}
 }
