@@ -70,7 +70,7 @@ func BenchmarkStressTest(b *testing.B) {
 			subCommand.Data["command"] = "subscribe"
 
 			msgCommand := NewMessage()
-			msgCommand.Channel = "chat"
+			msgCommand.Channel = "chat_advanced"
 			msgCommand.Data["msg"] = strings.Repeat("X", (msg_size - 53))
 
 			if err = client.Send(initCommand); err != nil {
