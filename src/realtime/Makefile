@@ -10,6 +10,8 @@ GOFILES=\
 	server.go\
 	realtime.go\
 
+DEPS=\
+	../socketio\
     
 include $(GOROOT)/src/Make.cmd
 
