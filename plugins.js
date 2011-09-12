@@ -63,16 +63,17 @@ function RT_Badge(userOpts) {
 	this.opts = {
 		container : $("body")[0],
 		position : "topright",
-		theme : "red",
+		theme : "black",
 		offsetX : -10,
 		offsetY : -10,
-		animate : "blink",
+		animate : "none",
 		shape : "round",
 		x : 0
 	};
 
 	// add the badge to the page
-	this.apply = function(userOpts) {
+	this.create = function(userOpts) {
+		var self = this;
 		this.opts = $.extend(this.opts,userOpts);
 		var $container = $(this.opts.container);
 		
@@ -86,11 +87,11 @@ function RT_Badge(userOpts) {
 				top:top + this.opts.offsetY
 			});
 			if(this.opts.shape == "square") this.$badge.addClass("square");
+			this.$badge.addClass(this.opts.theme);
 			$("body").append(this.$badge);
-			
-			// update badge info
-			this.update(this.opts.x);
-			
+
+			// upon creation, update the badge
+			this.update(this.opts.x);			
 		}
 				
 	}
@@ -122,7 +123,7 @@ function RT_Badge(userOpts) {
 			this.$badge.fadeOut();
 		}
 	}
-	
+
 	// update the text
 	this.update = function(x) {
 		this.opts = $.extend(this.opts,userOpts);
@@ -154,9 +155,13 @@ function RT_Badge(userOpts) {
 
 // create an instance of the badge plugin
 RT.plugins.badge = function(userOpts) {
-	var badge = new RT_Badge();
-	badge.apply(userOpts);
-	return badge;
+	if(window["RT_badge_"+userOpts.id]) {
+		window["RT_badge_"+userOpts.id].update(userOpts.x || "+1");
+	} else {
+		window["RT_badge_"+userOpts.id] = new RT_Badge();
+		window["RT_badge_"+userOpts.id].create(userOpts);
+	}
+	return window["RT_badge_"+userOpts.id];
 }
 
 // notify object that gets created when you call the plugin
@@ -321,5 +326,9 @@ RT.plugins.scrollToBottom = function(el) {
 RT.plugins.liveCounter = function(o) {
 	RT.addCommandEvent(o.channel,"onSubscribe",function(e) {
 		o.counter.innerHTML = e.data.count;
-	})
+	});
+	
+	RT.addCommandEvent(o.channel,"onUnsubscribe",function(e) {
+		o.counter.innerHTML = e.data.count;
+	});
 }

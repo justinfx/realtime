@@ -6,34 +6,55 @@
   <script src="plugins.js"></script>
   <link rel="stylesheet" type="text/css" href="rt.css"/>
   <script type="text/javascript">
+  var me = "";
     $(function() {
 
-		RT.debugging = false;
+		RT.debugging = true;
 
 		// connect with identity
-		RT.connect(prompt("name"),{},function() {
+		me = prompt("name");
+		RT.connect(me,{},function() {
 			
-		
+			// counter plugin
 			RT.plugins.liveCounter({
 				channel : "chat_advanced",
 				counter : $(".counterNumber")[0]
 			});
 			
+			// track when users are typing
 			RT.plugins.isTyping({
 				channel : "chat_advanced",
 				input : $("#chatText")[0],
 				output : $("#chat")[0]
 			});
 			
-			
 			// once connected subscrube
     		RT.subscribe("chat_advanced");
-    		
-    		
-    		badge = RT.plugins.badge({
-				container : $("#chat")[0],
-				animate : "none"
-			});
+    		// sub to your own channel
+    		RT.subscribe(me);
+
+		});
+		
+		// functinality for your own channel
+		RT.createChannel(me,{
+			onReceive : function(res) {
+				var message = res.data.msg;
+				
+				RT.plugins.badge({
+					id : "pmBadge",
+					container : $("#pmBox")[0],
+					theme : "red",
+					x : "+1"
+				});
+				
+				RT.plugins.notify({
+					title : res.identity+":",
+					theme : "google",
+					position:"topright",
+					msg : message.msg					
+				});
+				
+			}
 		});
 		
 		RT.createChannel("chat_advanced",{
@@ -42,6 +63,7 @@
 				// we could make msg be an object and have a type
 				// but were just gonna say if the first 4 is 'data' its an image
 				if(message.substring(0,4) == "data") {
+					console.log("data");
 					$("#chat").append("<div><img src='" +message + "'/></div>");
 				} else {
 					$("#chat").append("<div>"+res.identity+" - "+message+ "</div>");
@@ -52,34 +74,22 @@
 						position:"topright",
 						msg : message					
 					});
-					
-					badge.update("+1");
 
 				}
 				// always scroll to bottom
 				RT.plugins.scrollToBottom($("#chat")[0]);
 			},
+			onTest : function(res) {
+				console.log(res);
+			},
 			onSubscribe : function(res) {
 				$("#chat").append("<div>"+res.identity+" has subscribed</div>");
-				
-				/*
-				RT.plugins.notify({
-					title : "Welcome",
-					theme : "facebook",
-					position:"bottomleft",
-					msg : "who ever you are"					
-				});
-				*/
-				
 			},
 			onUnsubscribe : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has UNsubscribed</div>");
-			},
-			onConnect : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has connected</div>");
+				$("#chat").append("<div>"+res.identity+" has UNsubscribed</div>");
 			},
 			onDisconnect : function(res) {
-				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has disconnected</div>");
+				$("#chat").append("<div>"+res.identity+" has Disconnected</div>");
 			},
 			onError : function(res) {
 				RT.debug("error: ",res);
@@ -105,6 +115,8 @@
      			var file = e.originalEvent.dataTransfer.files[0];
 				var fr = new FileReader();
 				fr.onload = function(e) { 
+					console.log("sendign");
+					console.log(e.target.result);
 					RT.publish("chat_advanced",e.target.result);
 				}
 				fr.readAsDataURL(file);
@@ -119,12 +131,25 @@
      	
      	
      	$(".badgeOff").click(function() {
-     		badge.update("-1");
+     		
+     		RT.plugins.badge({
+				id : "pmBadge",
+    			channel : "bob",
+				container : $("#pmBox")[0],
+				x : "-1"
+			});
+     		
      		return false;
      	})
      	
      	$(".badgeUp").click(function() {
      		badge.update("+1");
+     		return false;
+     	})
+     	
+     	$("#pmsend").click(function() {
+     		
+     		RT.publish("bob",{msg : $("#pm").val()});	
      		return false;
      	})
      	
@@ -141,6 +166,10 @@
 	<div class="counterText">Users Online</div>
 </div>
 
+<div style="width:60px;height:30px;background:black;color:white;padding:10px;font-size:10px;font-family:helvetica;font-weight:bold" id="pmBox">
+	Private Messages
+</div>
+
 <div id="chat" style="width: 40em; height: 20em; overflow:auto; border: 1px solid black">
 </div>
 <form id="chatform">
@@ -149,7 +178,10 @@
 <input type="button" class="badgeUp" value="plus 1" />
 <input type="button" class="badgeOff" value="minus 1" />
 <input type="button" class="unsub" value="unsub"/>
-
+<br>
+<label>send PM</label>
+<input type="text" id="pm"/>
+<input type="button" id="pmsend" value="send pm to bob"/>
 
 </form>
 </body>

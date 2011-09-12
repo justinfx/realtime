@@ -3,6 +3,7 @@ class RT {
 	
 	var $domain = "";
 	var $api = "/api/publish";
+	var $status = 0;
 	
 	function __construct($domain) {
 		if($domain) $this->domain = $domain;
@@ -16,16 +17,22 @@ class RT {
 		curl_setopt($ch, CURLOPT_POST, 1);
 		
 		$json = json_encode(array(
-			"type"=>"message",
+			"type"=>"command",
 			"channel"=>$channel,
 			"identity"=>"sean",
 			"data"=>array(
-				"msg"=>$msg
+				"command"=>"onTest"
 			)
 		));
 		
-		curl_setopt($ch,CURLOPT_POSTFIELDS,"&data=$json");
-		return curl_exec($ch);
+		// set post
+		curl_setopt($ch,CURLOPT_POSTFIELDS,$json);
+		//exce
+		$ret = curl_exec($ch);
+		
+		// set the http status
+		$this->status = curl_getinfo($ch,CURLINFO_HTTP_CODE);
+		return $ret;
 	}
 }
 ?>

@@ -3,8 +3,6 @@
 <head>
   <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
   <script src="realtime.js"></script>
-  <script src="plugins.js"></script>
-  <link rel="stylesheet" type="text/css" href="rt.css"/>
   <style type="text/css">
   	#chat {
   		width:300px;
@@ -17,43 +15,25 @@
 
 		// connect with identity 
 		RT.connect("",{},function() {
-			RT.subscribe("chat");
+			RT.subscribe("chat_test");
 		});
 		
 		 
 		// creat the functionality for the chat
-		RT.createChannel("chat",{
+		RT.createChannel("chat_test",{
 			onReceive : function(res) {
-				var msg = res.data.msg;
-				$("#chat").append("<div>" + msg + "</div>");
-				RT.plugins.scrollToBottom($("#chat")[0]);
+				$("#chat").append("<div>" + res.data.msg + "</div>");
 				
-				RT.plugins.notify({
-					theme : "facebook",
-					position:"top",
-					msg : msg
-				});
-				
-				RT.plugins.notify({
-					theme : "facebook",
-					position:"bottomleft",
-					msg : msg
-				});
-				
-				RT.plugins.notify({
-					theme : "facebook",
-					position:"bottomright",
-					msg : msg
-				});
-				
+				// scroll to bottom
+				$("#chat")[0].scrollTop = $("#chat")[0].scrollHeight;
 			}
 		});
 
 
         //send the message when submit is clicked
         $('#chatform').submit(function () {
-			if($("#chatText").val()) {
-        		RT.publish("chat",$("#chatText").val());
+			if(val = $("#chatText").val()) {
+        		RT.publish("chat_test",val);
 				$("#chatText").val("");
 			}	
             return false;
