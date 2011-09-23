@@ -46,10 +46,11 @@ func BenchmarkStressTest(b *testing.B) {
 
 	for i := 0; i < clients; i++ {
 		go func() {
-			clientMessage := make(chan socketio.Message)
+			clientMessage := make(chan socketio.Message, 1000)
 
 			log.Println("Connecting to server at:", serverAddr)
 			client := socketio.NewWebsocketClient(socketio.SIOCodec{})
+			
 			client.OnMessage(func(msg socketio.Message) {
 				clientMessage <- msg
 			})
@@ -66,7 +67,7 @@ func BenchmarkStressTest(b *testing.B) {
 			initCommand.Data["command"] = "init"
 
 			subCommand := NewCommand()
-			subCommand.Channel = "chat"
+			subCommand.Channel = "chat_advanced"
 			subCommand.Data["command"] = "subscribe"
 
 			msgCommand := NewMessage()
@@ -78,21 +79,21 @@ func BenchmarkStressTest(b *testing.B) {
 			}
 
 			if err = client.Send(subCommand); err != nil {
-				log.Fatal("Send init:", err)
+				log.Fatal("Send subscribe:", err)
+			} else {
+				<-clientMessage
 			}
 
-			iook := make(chan bool)
+			iook := make(chan bool, 2)
 
 			go func() {
 
 				log.Printf("Sending %d messages of size %v bytes...", numMessages, msg_size)
 				var err os.Error
-				var msg message
 
 				for i := 0; i < numMessages; i++ {
 					//time.Sleep(0)
-					msg = *msgCommand
-					if err = client.Send(msg); err != nil {
+					if err = client.Send(*msgCommand); err != nil {
 						log.Fatal("Send ERROR:", err)
 					} else {
 						//log.Printf("Sent #%v", i+1)
@@ -106,6 +107,7 @@ func BenchmarkStressTest(b *testing.B) {
 				log.Printf("Receiving messages...")
 				for i := 0; i < numMessages; i++ {
 					<-clientMessage
+					//log.Printf("Recv #%v", i+1)
 				}
 				iook <- true
 			}()
@@ -121,7 +123,7 @@ func BenchmarkStressTest(b *testing.B) {
 			}()
 		}()
 	}
-
+	
 	log.Println("Waiting for clients disconnect")
 	for i := 0; i < clients; i++ {
 		<-clientDisconnect
