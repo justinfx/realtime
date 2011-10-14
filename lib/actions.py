@@ -16,16 +16,20 @@ os.environ["PYTHONPATH"] = ':'.join([P1, P2, ORIG])
 
 
 def start():
-    cmd = "cd %s && %s -c %s" % (ROOT, SUPERD, CONF)
+    #cmd = "cd %s && %s -c %s" % (ROOT, SUPERD, CONF)
+    cmd = "cd %s && %s" % (ROOT, SUPERD)
+    print cmd
     ret = os.system(cmd)
     if ret != 0:
         raise Exception('Error starting RealTime Server')
     
 def stop(quiet=False):
-    cmd = "%s -c %s shutdown" % (SUPERCTL, CONF)
+    #cmd = "%s -c %s shutdown" % (SUPERCTL, CONF)
+    cmd = "%s shutdown" % (SUPERCTL)
     if quiet:
         cmd = "%s &> /dev/null" % cmd
     cmd = 'cd %s && %s' % (ROOT, cmd)
+    print cmd
     ret = os.system(cmd)
     if ret != 0:
         raise Exception('Error stopping RealTime Server')
@@ -49,14 +53,12 @@ def restart(quiet=False):
  
     
 def status(quiet=False):
-    cmd = "%s -c %s status" % (SUPERCTL, CONF)
+    #cmd = "%s -c %s status" % (SUPERCTL, CONF)
+    cmd = "%s status" % (SUPERCTL)
     if quiet:
         cmd = "%s &> /dev/null" % cmd
     cmd = 'cd %s && %s' % (ROOT, cmd)
-    ret = call(cmd, shell=True)
+    print cmd
+    ret = os.system(cmd)
     if ret != 0:
         raise Exception('Error getting status of RealTime Server')
-        
-
-
-        

@@ -1,4 +1,4 @@
 #!/bin/bash
 
 DIR="$( cd -P "$( dirname "$0" )" && pwd )"
-cd $DIR && python ${DIR}/../lib/supervisor/supervisor/supervisord.py "$@"
+cd $DIR && PYTHONPATH=${DIR}/../lib/supervisor:$PYTHONPATH python ${DIR}/../lib/supervisor/supervisor/supervisord.py -c ${DIR}/../etc/supervisord.conf "$@"
