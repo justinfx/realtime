@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"http"
 	"strings"
-	"strconv"
+	"net"
 	"crypto/sha1"
 	"url"
 	"github.com/kless/goconfig/config"
@@ -136,17 +136,20 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 	)
 
 	origin = req.Header.Get("Origin")
-
+	if origin == "" {
+		origin = req.Header.Get("Sec-Websocket-Origin")
+	}
+	
 	if origin != "" {
 		url_, err = url.Parse(origin)
 
 		if err == nil && url_.Host != "" {
 			origin = strings.SplitN(url_.Host, ":", 2)[0]
-
-			if strings.Count(origin, ".") > 0 {
-				toDigits := strings.Replace(origin, ".", "", -1)
-				if _, err = strconv.Atoi64(toDigits); err != nil {
-					origin = strings.SplitN(origin, ".", 2)[1]
+			
+			if strings.Count(origin, ".") > 1 {
+				if ok := net.ParseIP(origin); ok == nil {
+					parts := strings.Split(origin, ".")
+					origin = strings.Join(parts[len(parts)-2:], ".")
 				}
 			}
 		}
@@ -154,7 +157,7 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 
 	host = strings.SplitN(req.Host, ":", 2)[0]
 
-	// localhost connections to a local server are always allowed
+		// localhost connections to a local server are always allowed
 	if host == LOCALHOST && (origin == "" || origin == LOCALHOST) {
 		return true
 	} else if origin == "" {
@@ -170,7 +173,7 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 	hash.Write(PADDING)
 	passed := l.IsValid(fmt.Sprintf("%x", hash.Sum()))
 	if !passed {
-		fmt.Printf("host: %v, origin: %v\n", host, origin)
+		Debugf("host: %v, origin: %v\n", host, origin)
 	}
 	return passed
 
