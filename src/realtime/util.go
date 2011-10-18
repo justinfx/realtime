@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"http"
 	"strings"
+	"strconv"
 	"crypto/sha1"
 	"url"
 	"github.com/kless/goconfig/config"
@@ -116,11 +117,14 @@ func NewLicense() (license License, err os.Error) {
 // Matches a given license string against the licenses
 // in the current configuration, and return true if its valid.
 func (l License) IsValid(lic string) bool {
+	buf := new(bytes.Buffer)
 	for _, val := range l {
+		buf.WriteString("License test failures: " + val + " != " + lic + "\n")
 		if val == lic {
 			return true
 		}
 	}
+	Debugln(buf.String())
 	return false
 }
 
@@ -135,10 +139,15 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 
 	if origin != "" {
 		url_, err = url.Parse(origin)
+
 		if err == nil && url_.Host != "" {
 			origin = strings.SplitN(url_.Host, ":", 2)[0]
-			if strings.Count(origin, ".") >= 2 {
-				origin = strings.SplitN(origin, ".", 2)[1]
+
+			if strings.Count(origin, ".") > 0 {
+				toDigits := strings.Replace(origin, ".", "", -1)
+				if _, err = strconv.Atoi64(toDigits); err != nil {
+					origin = strings.SplitN(origin, ".", 2)[1]
+				}
 			}
 		}
 	}
@@ -152,9 +161,17 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 		origin = host
 	}
 
+	if len(l) == 0 {
+		return false
+	}
+
 	hash := sha1.New()
 	hash.Write([]byte(origin))
 	hash.Write(PADDING)
-	return l.IsValid(fmt.Sprintf("%x", hash.Sum()))
+	passed := l.IsValid(fmt.Sprintf("%x", hash.Sum()))
+	if !passed {
+		fmt.Printf("host: %v, origin: %v\n", host, origin)
+	}
+	return passed
 
 }

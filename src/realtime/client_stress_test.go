@@ -50,7 +50,7 @@ func BenchmarkStressTest(b *testing.B) {
 
 			log.Println("Connecting to server at:", serverAddr)
 			client := socketio.NewWebsocketClient(socketio.SIOCodec{})
-			
+
 			client.OnMessage(func(msg socketio.Message) {
 				clientMessage <- msg
 			})
@@ -123,7 +123,7 @@ func BenchmarkStressTest(b *testing.B) {
 			}()
 		}()
 	}
-	
+
 	log.Println("Waiting for clients disconnect")
 	for i := 0; i < clients; i++ {
 		<-clientDisconnect

@@ -66,6 +66,7 @@ func (s *ServerHandler) OnConnect(c *socketio.Conn) {
 // When a client disconnected, remove their Client
 // object reference
 func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
+
 	defer func() {
 		if r := recover(); r != nil {
 			Debugln("OnDisconnect(): Recovered from disconnecting client:", r)
@@ -73,54 +74,57 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 		}
 	}()
 
-	wg := &sync.WaitGroup{}
-
 	s.clientsLock.RLock()
-	client := s.clients[c.String()]
+	client, ok := s.clients[c.String()]
 	s.clientsLock.RUnlock()
 
-	client.lock.RLock()
-	identity := client.Identity
+	if ok {
 
-	if len(client.Conns) <= 1 {
-		Debugln("OnDisconnect(): Client is last in group. Unsubscribing", client.Channels)
+		client.lock.RLock()
+		identity := client.Identity
 
-		msgs := []*message{}
-		for _, val := range client.Channels {
-			msg := NewCommand()
-			msg.Channel = val
-			msg.Data["command"] = "unsubscribe"
-			msg.Identity = identity
-			msgs = append(msgs, msg)
+		wg := &sync.WaitGroup{}
+
+		if len(client.Conns) <= 1 {
+			Debugln("OnDisconnect(): Client is last in group. Unsubscribing", client.Channels)
+
+			msgs := []*message{}
+			for _, val := range client.Channels {
+				msg := NewCommand()
+				msg.Channel = val
+				msg.Data["command"] = "unsubscribe"
+				msg.Identity = identity
+				msgs = append(msgs, msg)
+			}
+			client.lock.RUnlock()
+
+			for _, m := range msgs {
+				wg.Add(1)
+				go func() {
+					req := NewDispatchReq(c, m, true)
+					s.unsubscribeCmd(req)
+					wg.Done()
+				}()
+			}
+
+			if identity != "" {
+				s.identsLock.Lock()
+				s.idents[identity] = nil, false
+				s.identsLock.Unlock()
+			}
+
+		} else {
+			client.lock.RUnlock()
 		}
-		client.lock.RUnlock()
 
-		for _, m := range msgs {
-			wg.Add(1)
-			go func() {
-				req := NewDispatchReq(c, m, true)
-				s.unsubscribeCmd(req)
-				wg.Done()
-			}()
-		}
+		wg.Wait()
 
-		if identity != "" {
-			s.identsLock.Lock()
-			s.idents[identity] = nil, false
-			s.identsLock.Unlock()
-		}
-
-	} else {
-		client.lock.RUnlock()
+		client.RemoveConn(c)
 	}
-
-	wg.Wait()
-
-	client.RemoveConn(c)
 
 	s.clientsLock.Lock()
 	s.clients[c.String()] = nil, false
-	Debugln("OnDisconnect: cleared connection from client list")
+	//	Debugln("OnDisconnect: cleared connection from client list")
 	s.clientsLock.Unlock()
 
 }
