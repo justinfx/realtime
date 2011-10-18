@@ -23,7 +23,8 @@ var RT = {
         this.socket = new io.Socket((options && options.server) || this.options.server, {
             port: (options && options.port) || this.options.port,
             rememberTransport: false,
-            resource: (options && options.resource) || this.options.resource
+            resource: (options && options.resource) || this.options.resource,
+	    transports:["websocket","flashsocket","htmlfile","xhr-polling","jsonp-polling"]
         });
         this.socket.connect();
         for (i in options) {
