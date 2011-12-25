@@ -1,12 +1,12 @@
 package main
 
 import (
-	"socketio"
 	"fmt"
-	"http"
+	"net/http"
+	"socketio"
+	"sync"
 	"testing"
 	"time"
-	"sync"
 )
 
 const (

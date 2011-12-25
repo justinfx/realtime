@@ -9,3 +9,4 @@ realtime
 *.zip
 *.pyc
 hash.txt
+src/_bin

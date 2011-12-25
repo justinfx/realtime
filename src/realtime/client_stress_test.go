@@ -1,13 +1,13 @@
 package main
 
 import (
-	"testing"
-	"socketio"
-	"strings"
-	"os"
-	"log"
 	"flag"
+	"log"
+	"socketio"
+
 	"strconv"
+	"strings"
+	"testing"
 )
 
 func BenchmarkStressTest(b *testing.B) {
@@ -89,7 +89,7 @@ func BenchmarkStressTest(b *testing.B) {
 			go func() {
 
 				log.Printf("Sending %d messages of size %v bytes...", numMessages, msg_size)
-				var err os.Error
+				var err error
 
 				for i := 0; i < numMessages; i++ {
 					//time.Sleep(0)

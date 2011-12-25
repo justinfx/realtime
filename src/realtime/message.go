@@ -10,10 +10,9 @@ package main
 */
 
 import (
-	"time"
+	"encoding/json"
 	"fmt"
-	"json"
-	"os"
+	"time"
 )
 
 const (
@@ -51,7 +50,7 @@ func NewCommand() *message {
 	return &message{
 		Type:      "command",
 		Success:   true,
-		Timestamp: time.UTC().String(),
+		Timestamp: time.Now().UTC().String(),
 		Data:      map[string]interface{}{},
 		mtype:     CommandType,
 	}
@@ -61,7 +60,7 @@ func NewMessage() *message {
 	return &message{
 		Type:      "message",
 		Success:   true,
-		Timestamp: time.UTC().String(),
+		Timestamp: time.Now().UTC().String(),
 		Data:      map[string]interface{}{},
 		mtype:     MessageType,
 	}
@@ -74,7 +73,7 @@ func NewErrorMessage(err string) *message {
 	return msg
 }
 
-func NewJsonMessage(raw []byte) (msg *message, err os.Error) {
+func NewJsonMessage(raw []byte) (msg *message, err error) {
 	msg = NewMessage()
 	err = json.Unmarshal(raw, msg)
 	if err != nil {

@@ -1,17 +1,18 @@
 package main
 
 import (
-	"os"
-	"fmt"
-	"path/filepath"
 	"bufio"
 	"bytes"
-	"http"
-	"strings"
-	"net"
 	"crypto/sha1"
-	"url"
+	"errors"
+	"fmt"
 	"github.com/kless/goconfig/config"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 var (
@@ -26,7 +27,7 @@ const (
 // directory, an etc/ subdir, or an etc/ directory one up
 // from the current directory
 // Returns a new Config object
-func getConf() (*config.Config, os.Error) {
+func getConf() (*config.Config, error) {
 	p1 := filepath.Join(ROOT, CONF_NAME)
 
 	parent, _ := filepath.Split(ROOT)
@@ -37,14 +38,14 @@ func getConf() (*config.Config, os.Error) {
 	for _, p := range []string{p1, p2, p3} {
 		if fileExists(p) {
 			if c, err := config.ReadDefault(p); err != nil {
-				return nil, os.NewError(fmt.Sprintf("Error reading config: %v", p))
+				return nil, errors.New(fmt.Sprintf("Error reading config: %v", p))
 			} else {
 				return c, nil
 			}
 		}
 	}
 
-	return nil, os.NewError("No config file found")
+	return nil, errors.New("No config file found")
 
 }
 
@@ -55,7 +56,7 @@ type License []string
 // from the current directory
 // Returns a new License object, populated with the parsed
 // license keys
-func NewLicense() (license License, err os.Error) {
+func NewLicense() (license License, err error) {
 	lic := "license.txt"
 
 	p1 := filepath.Join(ROOT, lic)
@@ -108,7 +109,7 @@ func NewLicense() (license License, err os.Error) {
 		}
 	}
 	if len(license) == 0 {
-		err = os.NewError("Unable to find/read any valid licenses")
+		err = errors.New("Unable to find/read any valid licenses")
 	}
 	return license, err
 
@@ -131,7 +132,7 @@ func (l License) IsValid(lic string) bool {
 func (l License) CheckHttpRequest(req *http.Request) bool {
 	var (
 		url_         *url.URL
-		err          os.Error
+		err          error
 		origin, host string
 	)
 
@@ -139,13 +140,13 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 	if origin == "" {
 		origin = req.Header.Get("Sec-Websocket-Origin")
 	}
-	
+
 	if origin != "" {
 		url_, err = url.Parse(origin)
 
 		if err == nil && url_.Host != "" {
 			origin = strings.SplitN(url_.Host, ":", 2)[0]
-			
+
 			if strings.Count(origin, ".") > 1 {
 				if ok := net.ParseIP(origin); ok == nil {
 					parts := strings.Split(origin, ".")
@@ -157,7 +158,7 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 
 	host = strings.SplitN(req.Host, ":", 2)[0]
 
-		// localhost connections to a local server are always allowed
+	// localhost connections to a local server are always allowed
 	if host == LOCALHOST && (origin == "" || origin == LOCALHOST) {
 		return true
 	} else if origin == "" {
@@ -171,7 +172,7 @@ func (l License) CheckHttpRequest(req *http.Request) bool {
 	hash := sha1.New()
 	hash.Write([]byte(origin))
 	hash.Write(PADDING)
-	passed := l.IsValid(fmt.Sprintf("%x", hash.Sum()))
+	passed := l.IsValid(fmt.Sprintf("%x", hash.Sum(nil)))
 	if !passed {
 		Debugf("host: %v, origin: %v\n", host, origin)
 	}

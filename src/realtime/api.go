@@ -2,8 +2,8 @@
 package main
 
 import (
-	"http"
 	"fmt"
+	"net/http"
 )
 
 // The handler function for accepting and publishing messages

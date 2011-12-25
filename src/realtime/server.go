@@ -8,9 +8,10 @@ package main
 */
 
 import (
-	"os"
-	"sync"
+	"errors"
 	"fmt"
+
+	"sync"
 
 	// 3rd party
 	"socketio"
@@ -109,7 +110,7 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 
 			if identity != "" {
 				s.identsLock.Lock()
-				s.idents[identity] = nil, false
+				delete(s.idents, identity)
 				s.identsLock.Unlock()
 			}
 
@@ -123,7 +124,7 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 	}
 
 	s.clientsLock.Lock()
-	s.clients[c.String()] = nil, false
+	delete(s.clients, c.String())
 	//	Debugln("OnDisconnect: cleared connection from client list")
 	s.clientsLock.Unlock()
 
@@ -181,7 +182,7 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 		err = s.handleMessage(c, msg)
 
 	default:
-		err = os.NewError("Malformed command message")
+		err = errors.New("Malformed command message")
 	}
 
 	if err != nil {
@@ -193,12 +194,12 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 // The message was a 'command' type
 // If its a system command, route it to the handler
 // otherwise, forward it to the other clients as a generic message
-func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Error) {
+func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err error) {
 
 	switch msg.Data["command"].(string) {
 
 	case "":
-		err = os.NewError("Malformed command message")
+		err = errors.New("Malformed command message")
 
 	case "subscribe":
 		s.subscribeCmd(NewDispatchReq(c, msg, false))
@@ -215,7 +216,7 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 			Debugln("Forwarding generic command message:", msg.raw)
 			err = s.publish(c, msg)
 		} else {
-			err = os.NewError("Generic command message has no channel")
+			err = errors.New("Generic command message has no channel")
 		}
 	}
 
@@ -225,7 +226,7 @@ func (s *ServerHandler) handleCommand(c *socketio.Conn, msg *message) (err os.Er
 
 // Raw message was a 'message' type. Publish this
 // to clients on the same channel
-func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err os.Error) {
+func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err error) {
 	Debugln("msgHandler():", c, msg.raw)
 
 	err = s.publish(c, msg)
@@ -233,10 +234,10 @@ func (s *ServerHandler) handleMessage(c *socketio.Conn, msg *message) (err os.Er
 	return err
 }
 
-func (s *ServerHandler) publish(c *socketio.Conn, msg *message) (err os.Error) {
+func (s *ServerHandler) publish(c *socketio.Conn, msg *message) (err error) {
 
 	if msg.Channel == "" || msg.Data == nil || len(msg.Data) == 0 {
-		err = os.NewError("msg either has no channel or no data. not publishing")
+		err = errors.New("msg either has no channel or no data. not publishing")
 		return err
 	}
 
@@ -434,7 +435,7 @@ Dispatch:
 
 			for _, clientTest = range members {
 				if clientTest == client {
-					err := os.NewError("client already subscribed to channel")
+					err := errors.New("client already subscribed to channel")
 					Debugln(err)
 					req.SetDone()
 					continue Dispatch
@@ -491,7 +492,7 @@ Dispatch:
 				client.RemoveChannel(msg.Channel)
 
 			} else {
-				err := os.NewError("client was not subscribed to channel")
+				err := errors.New("client was not subscribed to channel")
 				Debugln(err)
 				req.SetDone()
 				continue

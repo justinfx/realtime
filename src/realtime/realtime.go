@@ -2,13 +2,13 @@ package main
 
 import (
 	"flag"
-	"log"
-	"http"
 	"fmt"
-	"strings"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	//"http/pprof"
 
 	// 3rd party
@@ -18,7 +18,6 @@ import (
 //
 // Set up runtime constants
 //
-
 
 var (
 	SERVER  *ServerHandler
@@ -52,7 +51,7 @@ func init() {
 		HWM:           5000,
 	}
 
-	var err os.Error
+	var err error
 	LICENSE, err = NewLicense()
 	if err != nil {
 		log.Println("Warning: No valid license keys were found. Only localhost connections are permitted.")

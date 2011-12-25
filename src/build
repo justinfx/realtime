@@ -7,4 +7,4 @@ if [[ $1 == "clean" ]]; then
     CLEAN="-c"
 fi
 
-cd $DIR && gb $CLEAN -b -v && cp -v ./bin/realtime ../
+cd $DIR && gb $CLEAN -b -v && cp -v ./_bin/realtime ../
