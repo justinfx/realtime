@@ -7,4 +7,9 @@ if [[ $1 == "clean" ]]; then
     CLEAN="-c"
 fi
 
-cd $DIR && gb $CLEAN -b -v && cp -v ./_bin/realtime ../
+if [[ $GOOS == "linux" ]]
+then
+    cd ${DIR}/realtime && gb $CLEAN -b -v && cp -v realtime ../../
+else
+    cd $DIR && gb $CLEAN -b -v && cp -v ./_bin/realtime ../
+fi
