@@ -10,3 +10,5 @@ realtime
 *.pyc
 hash.txt
 src/_bin
+example
+pkg

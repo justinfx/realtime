@@ -117,8 +117,8 @@ func main() {
 			switch t {
 			case "xhr-polling":
 				config.Transports[i] = socketio.NewXHRPollingTransport(10e9, 5e9)
-				//			case "xhr-multipart":
-				//				config.Transports[i] = socketio.NewXHRMultipartTransport(0, 5e9)
+			case "xhr-multipart":
+				config.Transports[i] = socketio.NewXHRMultipartTransport(0, 5e9)
 			case "websocket":
 				config.Transports[i] = socketio.NewWebsocketTransport(0, 5e9)
 			case "htmlfile":

@@ -9,7 +9,7 @@ fi
 
 if [[ $GOOS == "linux" ]]
 then
-    cd ${DIR}/realtime && gb $CLEAN -b -v && cp -v realtime ../../
+    cd ${DIR}/realtime && gb $CLEAN -b -v 
 else
-    cd $DIR && gb $CLEAN -b -v && cp -v ./_bin/realtime ../
+    cd $DIR && gb $CLEAN -b -v 
 fi
