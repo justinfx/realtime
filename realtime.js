@@ -1,253 +1,257 @@
-var RT = {
-    debugging: true,
-    plugins: {},
-    socket: null,
-    channelMethods: {},
-    identity: null,
-    notifyOpen: false,
-    options: {
-        strip: false,
-        htmlEntities: true,
-        dateFormat: "longTime",
-        daysToSave: 1,
-        port: 8001,
-        resource: "realtime",
-        channelsCookie: "realTime_channels",
-        identityCookie: "realTime_identity",
-        server: "localhost"
-    },
-    connect: function(identity, options, callback) {
-        var connected = RT._connect(identity, options, callback);
-    },
-    _connect: function(identity, options, callback) {
-        this.socket = new io.Socket((options && options.server) || this.options.server, {
-            port: (options && options.port) || this.options.port,
-            rememberTransport: false,
-            resource: (options && options.resource) || this.options.resource
-        });
-        this.socket.connect();
-        for (i in options) {
-            if (typeof options[i] == "object") {
-                for (j in options[i]) this.options[i][j] = options[i][j];
-            } else {
-                this.options[i] = options[i];
-            }
-        }
-        if (this.options.stripHTML) {
-            this.options.strip = /<[^>]*>/gi;
-        }
-        this.saveIdentity(identity);
-        this.debug("savedChannels: ", this.getSavedChannles());
-        this.socket.addEvent('connect', function() {
-            var init = {
-                type: "command",
-                identity: identity,
-                data: {
-                    command: "init",
-                    options: {
-                        channels: RT.getSavedChannles()
-                    }
-                }
-            }
-            RT.socket.send(init);
-            if (callback) callback();
-        });
-        this.socket.addEvent('message', function(json) {
-            if (typeof(json) != "object") json = JSON.parse(json);
-            RT.debug("Incoming Message [" + json.channel + "]: ", json);
-            document.title = json.error;
-            if (json.type && json.channel) {
-                var channel = json.channel;
-                var channelObj = RT.channelMethods[channel];
-                switch (json.type) {
-                case "message":
-                    if (channelObj._hasMethod("onReceive")) {
-                        if (RT.options.strip || RT.options.htmlEntities) {
-                            var stripped = JSON.stringify(json.data, function(key, value) {
-                                if (typeof value === 'string') {
-                                    if (RT.options.strip) {
-                                        return value.replace(RT.options.strip, "");
-                                    } else if (RT.options.htmlEntities) {
-                                        return value.replace(/</, "&lt;").replace(/>/, "&gt;");
-                                    }
-                                }
-                                return value;
-                            });
-                            json.data = JSON.parse(stripped);
-                        }
-                        json.timestamp = RT.formatDate(json.timestamp);
-                        channelObj.onReceive(json);
-                        RT.debug("Calling Channel Method: ", channel);
-                    }
-                    break
-                case "command":
-                    if (channelObj._hasMethod(json.data.command)) {
-                        if ((json.data.options && !json.data.options.notMe) || (json.identity != RT.identity)) {
-                            json.timestamp = RT.formatDate(json.timestamp);
-                            channelObj[json.data.command]({
-                                identity: json.identity,
-                                timestamp: json.timestamp,
-                                count: json.data.count
-                            });
-                            RT.debug("Command: [" + channel + "][" + json.data.command + "]", json);
-                        }
-                    }
-                    break;
-                default:
-                    break;
-                }
-            }
-        });
-    },
-    saveIdentity: function(identity) {
-        if (identity && typeof(identity) == "string") {
-            this.identity = identity;
-            setCookie(this.options.identityCookie, identity, this.options.daysToSave);
-        }
-    },
-    clearIdentity: function() {
-        setCookie(this.options.identityCookie, "", 0);
-        this.identity = null;
-    },
-    saveChannel: function(channel) {
-        var channels = this.getSavedChannles();
-        if (channels) {
-            if (!inArray(channel, channels)) {
-                channels.push(channel);
-            }
-            setCookie(this.options.channelsCookie, channels.join(","), this.options.daysToSave);
-        }
-    },
-    unSaveChannel: function(channel) {
-        var channels = this.getSavedChannles();
-        if (channels) {
-            var index = channels.indexOf(channel);
-            if (index != -1) channels.splice(index, 1);
-            setCookie(this.options.channelsCookie, channels.join(","), this.options.daysToSave);
-        }
-    },
-    getSavedChannles: function() {
-        var channels = getCookie(this.options.channelsCookie);
-        if (channels) {
-            return channels.split(",");
-        } else {
-            return false;
-        }
-    },
-    subscribe: function(channels) {
-        if (!this.socket) this.connect();
-        if (typeof(channels) == "string") {
-            channels = new Array(channels);
-        }
-        for (i in channels) {
-            var channel = channels[i];
-            this.debug("Subscription: ", channel);
-            try {
+(function($) {
+	
+	var Channel = Base.inherit({
+		name : "",
+		_has : function(method) {
+			return this.hasOwnProperty(method)
+		},
+		onRecieve : null,
+		onSubscribe : null,
+		onUnsubscribe :null,
+		onDisconnect : null, 
+		onError : null
+	});
+	
+	window.RT = Base.inherit({
+	    debugging: true,
+	    plugins: {},
+	    channels : {},
+	    socket: null,
+	    channelMethods: {},
+	    identity: null,
+	    notifyOpen: false,
+	    options: {
+	    	subscription : [],
+	        strip: /<[^>]*>/gi,
+	        htmlEntities: true,
+	        dateFormat: "longTime",
+	        daysToSave: 1,
+	        port: 8001,
+	        resource: "realtime",
+	        channelsCookie: "realTime_channels",
+	        identityCookie: "realTime_identity",
+	        server: "localhost"
+	    },
+	    connect: function(options) {
+	        var connected = RT._connect(options);
+	    },
+	    _connect: function(options) {
+	    	
+	    	// self var for JS's crazy scope
+	    	var self = this;
+	    	
+	    	// extend 2 levels deep our options
+	        for (i in options) {
+	            if (typeof options[i] == "object") {
+	                for (j in options[i]) this.options[i][j] = options[i][j];
+	            } else {
+	                this.options[i] = options[i];
+	            }
+	        }
+	        
+	        // set identity on root
+	        this.identity = this.options.identity || "";
+	    	
+	        // create and connect new socket
+	        this.socket = new io.Socket(this.options.server, {
+	            port: this.options.port,
+	            rememberTransport: false,
+	            resource: this.options.resource
+	        }).connect();
+	        
+			// the above connect() calls this event
+	        this.socket.addEvent('connect', function() {
+	            
+	            // send init
+	            this.send({
+	                type: "command",
+	                identity: self.identity,
+	                data: {
+	                    command: "init",
+	                    options: {
+	                        channels: self.options.subscription
+	                    }
+	                }
+	            });
+	            
+	            // after init, we can subscribe
+	            self.subscribe(self.options.subscription);
+	            
+	        });
+	        
+	        
+	        // whenever socketIO tells us something
+	        this.socket.addEvent('message', function(json) {
+	        	
+	        	// make sure we've got JSON
+	            if (typeof(json) != "object") json = JSON.parse(json);
+				
+				// if we have an error, throw it
+	            if(json.error) throw(json.error);
+	            
+	            // the date comes in in a stupid format
+	            json.timestamp = self.formatDate(json.timestamp);
+				
+				if(typeof self.channels[json.channel] == "undefined") {
+					throw(json.type+" received on channel ["+json.channel+"] that is not defined");
+				}
+				
+				
+				var channel = self.channels[json.channel];
+				switch(json.type) {
+					case "command":
+						var command = json.data.command;
+						
+						self.debug("Incoming Command",command,json.channel);
+						
+						if(channel._has(command)) {
+							channel[command](json);
+						} else {
+							self.debug("Channel ["+channel.name+"] does not have command ["+command+"] defined");
+						}
+						
+						break;
+					case "message":
+						
+						self.debug("Incoming Message",json,json.channel);
+						
+						if(channel._has("onReceive")) {
+							// make it easier to access msg
+							json.msg = json.data.msg;
+							// call onReceive
+							channel.onReceive(json);
+						} else {
+							throw("onReceive not being handled on Channel ["+channel.name+"]");
+						}
+						break;
+					default:
+						break;
+				}
+				
+	        });
+	    },
+	  	subscribe: function(channels,userData) {
+	        
+	        // make sure we have an array to use
+	        if (typeof(channels) == "string") {
+	            channels = new Array(channels);
+	        }
+	        
+	        // send subscribe per each channel
+	        for (i in channels) {
                 this.socket.send({
                     type: "command",
-                    channel: channel,
+                    channel: channels[i],
                     data: {
-                        command: "subscribe"
+                        command: "subscribe",
+                        options: userData
                     }
                 });
-                this.saveChannel(channel);
-            } catch (e) {
-                throw ("You need to subscribe in the connect() call");
-            }
-        }
-    },
-    unsubscribe: function(channels) {
-        if (typeof(channels) == "string") {
-            channels = new Array(channels);
-        }
-        for (i in channels) {
-            var channel = channels[i];
-            this.debug("Subscription: ", channel);
-            this.socket.send({
-                type: "command",
-                channel: channel,
-                data: {
-                    command: "unsubscribe"
-                }
-            });
-            this.unSaveChannel(channel);
-        }
-    },
-    publish: function(channel, msg) {
-        if (!this.socket) this.connect();
-        this.debug("Publishing [" + channel + "]: ", msg);
-        this.socket.send({
-            type: "message",
-            channel: channel,
-            data: {
-                msg: msg
-            }
-        });
-        if (this.channelMethods[channel]) {
-            if (typeof(this.channelMethods[channel].onSend) == "function") {
-                this.channelMethods[channel].onSend(msg);
-            }
-        } else {
-            this.debug("Channel " + channel + " not created");
-        }
-    },
-    createChannel: function(channel, methods) {
-        this.channelMethods[channel] = methods;
-        this.channelMethods[channel]["_hasMethod"] = function(method) {
-            return typeof(this[method]) == "function"
-        }
-        this.channelMethods[channel]["_triggerEvent"] = function(event, options) {
-            this.triggerEvent(channel, event, options);
-        }
-        this.debug("Creating Channel: ", channel)
-    },
-    triggerEvent: function(channel, event, options) {
-        this.debug("triggerEvent: ", event);
-        this.socket.send({
-            type: "command",
-            channel: channel,
-            data: {
-                command: event,
-                options: options
-            }
-        });
-    },
-    debug: function(data1, data2) {
-        
-        try {
-            if (this.debugging && window.console && console.log) {
-                console.log(data1, data2);
-            }
-        } catch (e) {}
-        
-    },
-    formatDate: function(timestamp) {
-        if (this.options.dateFormat) {
-            var d = new Date(Date(timestamp));
-            return d.format(this.options.dateFormat);
-        } else {
-            return timestamp;
-        }
-    },
-    addMessageEvent: function(channel, callback) {
-        this.socket.addEvent('message', function(json) {
-            if (typeof(json) != "object") json = JSON.parse(json);
-            if (json.type == "message" && json.channel == channel) {
-                json.timestamp = RT.formatDate(json.timestamp);
-                callback(json);
-            }
-        })
-    },
-    addCommandEvent: function(channel, command, callback) {
-        this.socket.addEvent('message', function(json) {
-            if (typeof(json) != "object") json = JSON.parse(json);
-            if (json.type == "command" && json.data.command == command && json.channel == channel) {
-                json.timestamp = RT.formatDate(json.timestamp);
-                callback(json);
-            }
-        })
-    }
-}
+	        }
+	    },
+	    unsubscribe: function(channels) {
+	        if (typeof(channels) == "string") {
+	            channels = new Array(channels);
+	        }
+	        for (i in channels) {
+	            var channel = channels[i];
+	            this.debug("Subscription: ", channel);
+	            this.socket.send({
+	                type: "command",
+	                channel: channel,
+	                data: {
+	                    command: "unsubscribe"
+	                }
+	            });
+	            this.unSaveChannel(channel);
+	        }
+	    },
+	    publish: function(channel, msg) {
+	    	
+	    	// connect if not connect?
+	        if (!this.socket) this.connect();
+	        
+	        // if our channel isn't defined, throw error
+	        if (!this.channels[channel]) {
+	            throw("Cannot publish. Channel ["+channel+"] not created");
+	        }
+	        
+	        // publish message
+	        this.socket.send({
+	            type: "message",
+	            channel: channel,
+	            data: {
+	                msg: msg
+	            }
+	        });
+	        
+	    },
+	    createChannel: function(channel, methods) {
+	    	
+	    	// all options are on root level for Channel
+	    	var options = methods;
+	    	options.name = channel;
+	    	
+	    	// create an instance of a channel
+	    	this.channels[channel] = Channel.inherit(options);
+	    	
+	    	/*
+	        this.channelMethods[channel] = methods;
+	        this.channelMethods[channel]["_hasMethod"] = function(method) {
+	            return typeof(this[method]) == "function"
+	        }
+	        this.channelMethods[channel]["_triggerEvent"] = function(event, options) {
+	            this.triggerEvent(channel, event, options);
+	        }
+	        this.debug("Creating Channel: ", channel)
+	        */
+	    },
+	    triggerEvent: function(channel, event, options) {
+	        this.debug("triggerEvent: ", event);
+	        this.socket.send({
+	            type: "command",
+	            channel: channel,
+	            data: {
+	                command: event,
+	                options: options
+	            }
+	        });
+	    },
+	    debug: function() {
+	        if(typeof window.console != "undefined") {
+	        	var args = Array.prototype.slice.call(arguments);
+	        	console.log(args);
+	        }
+	        
+	    },
+	    formatDate: function(timestamp) {
+	        if (this.options.dateFormat) {
+	            var d = new Date(Date(timestamp));
+	            return d.format(this.options.dateFormat);
+	        } else {
+	            return timestamp;
+	        }
+	    },
+	    addMessageEvent: function(channel, callback) {
+	        this.socket.addEvent('message', function(json) {
+	            if (typeof(json) != "object") json = JSON.parse(json);
+	            if (json.type == "message" && json.channel == channel) {
+	                json.timestamp = RT.formatDate(json.timestamp);
+	                callback(json);
+	            }
+	        })
+	    },
+	    addCommandEvent: function(channel, command, callback) {
+	        this.socket.addEvent('message', function(json) {
+	            if (typeof(json) != "object") json = JSON.parse(json);
+	            if (json.type == "command" && json.data.command == command && json.channel == channel) {
+	                json.timestamp = RT.formatDate(json.timestamp);
+	                callback(json);
+	            }
+	        })
+	    }
+	});
+})(window.jQuery);
 
 function setCookie(c_name, value, exdays) {
     var exdate = new Date();

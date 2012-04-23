@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="http://code.jquery.com/jquery-latest.min.js"></script>
+  <script src="base.js"></script>
   <script src="realtime.js"></script>
   <style type="text/css">
   	#chat {
@@ -12,20 +13,27 @@
   </style>
   <script type="text/javascript">
     $(function() {
-
+		
+		
 		// connect with identity 
-		RT.connect("",{},function() {
-			RT.subscribe("chat_test");
+		RT.connect({
+			identity : "",
+			server : "184.106.226.97",
+			port : "8004",
+			subscription : ["chat_test"]
 		});
 		
-		 
 		// creat the functionality for the chat
 		RT.createChannel("chat_test",{
-			onReceive : function(res) {
-				$("#chat").append("<div>" + res.data.msg + "</div>");
+			onReceive : function(data) {
+				
+				$("#chat").append("<div>" + data.msg + "</div>");
 				
 				// scroll to bottom
 				$("#chat")[0].scrollTop = $("#chat")[0].scrollHeight;
+			},
+			onSubscribe : function(data) {
+				console.log("user defined on subscribe",data);
 			}
 		});
 
