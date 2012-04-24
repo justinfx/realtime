@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	//"http/pprof"
 
 	// 3rd party
@@ -140,16 +141,16 @@ func main() {
 	sio.SetAuthorization(func(r *http.Request) bool { return LICENSE.CheckHttpRequest(r) })
 
 	// start a signal handler
+	sigChan := make(chan os.Signal, 2)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		for sig := range signal.Incoming {
-			switch sig.(os.UnixSignal) {
-			case os.SIGTERM, os.SIGINT:
-				log.Println("Server shutting down.")
-				SERVER.Shutdown()
-				os.Exit(0)
-			}
+		for s := range sigChan {
+			log.Printf("Caught Signal %v - Server shutting down.\n", s)
+			SERVER.Shutdown()
+			os.Exit(0)
 		}
 	}()
+
 
 	// start the flash server
 	go func() {

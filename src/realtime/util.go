@@ -81,10 +81,7 @@ func NewLicense() (license License, err error) {
 				continue
 			}
 
-			reader, err = bufio.NewReaderSize(fh, 50)
-			if err != nil {
-				continue
-			}
+			reader = bufio.NewReaderSize(fh, 50)
 
 			buffer.Reset()
 
