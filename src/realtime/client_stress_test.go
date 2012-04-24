@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"log"
-	"socketio"
+	"github.com/justinfx/go-socket.io/socketio"
 
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func BenchmarkStressTest(b *testing.B) {
@@ -18,7 +19,7 @@ func BenchmarkStressTest(b *testing.B) {
 	clients := 1
 	msg_size := 150 // bytes
 
-	clientDisconnect := make(chan bool)
+	clientDisconnect := make(chan bool, 100)
 
 	numMessages := b.N
 	serverAddr := "localhost:8001"
@@ -45,6 +46,11 @@ func BenchmarkStressTest(b *testing.B) {
 	b.StartTimer()
 
 	for i := 0; i < clients; i++ {
+		b.StopTimer()
+		if i > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		b.StartTimer()
 		go func() {
 			clientMessage := make(chan socketio.Message, 1000)
 
@@ -123,6 +129,9 @@ func BenchmarkStressTest(b *testing.B) {
 			}()
 		}()
 	}
+	b.StopTimer()
+	time.Sleep(500 * time.Millisecond)
+	b.StartTimer()
 
 	log.Println("Waiting for clients disconnect")
 	for i := 0; i < clients; i++ {

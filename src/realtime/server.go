@@ -14,7 +14,7 @@ import (
 	"sync"
 
 	// 3rd party
-	"socketio"
+	"github.com/justinfx/go-socket.io/socketio"
 )
 
 type ServerHandler struct {

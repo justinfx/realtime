@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"socketio"
+	"github.com/justinfx/go-socket.io/socketio"
 	"sync"
 	"testing"
 	"time"
