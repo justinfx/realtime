@@ -3,7 +3,9 @@
 import sys
 import os
 
-THIS = os.path.dirname(os.path.abspath(__file__)).rstrip("/bin") 
+THIS = os.path.dirname(os.path.abspath(__file__))
+if THIS.endswith('/bin'):
+    THIS = os.path.dirname(THIS)
 sys.path.insert(0, THIS) 
 import sitecustomize 
 reload(sitecustomize)

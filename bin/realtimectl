@@ -1,4 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env python
 
-DIR="$( cd -P "$( dirname "$0" )" && pwd )"
-cd $DIR && python ${DIR}/../lib/supervisor/supervisor/supervisorctl.py "$@"
+import sys
+import os
+
+THIS = os.path.dirname(os.path.abspath(__file__))
+if THIS.endswith('/bin'):
+    THIS = os.path.dirname(THIS)
+sys.path.insert(0, THIS) 
+import sitecustomize 
+reload(sitecustomize)
+
+from lib import actions
+
+try:
+    actions.run(' '.join(sys.argv[1:]))    
+except Exception, e:
+    print str(e)
+    sys.exit(255)
+
+sys.exit(0)
