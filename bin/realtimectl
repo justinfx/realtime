@@ -16,5 +16,5 @@ superctl 	= os.path.join(THIS, "lib/supervisor/supervisor/supervisorctl.py")
 superconf 	= os.path.join(THIS, "etc/supervisord.conf")
 args_str 	= ' '.join(sys.argv[1:])
 
-cmd = "cd %(THIS)s && %(superctl)s -c %(superconf)s %(args_str)s" % locals()
+cmd = "cd %(THIS)s && python %(superctl)s -c %(superconf)s %(args_str)s" % locals()
 sys.exit(os.system(cmd))
