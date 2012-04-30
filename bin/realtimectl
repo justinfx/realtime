@@ -12,10 +12,9 @@ reload(sitecustomize)
 
 from lib import actions
 
-try:
-    actions.run(' '.join(sys.argv[1:]))    
-except Exception, e:
-    print str(e)
-    sys.exit(255)
+superctl 	= os.path.join(THIS, "lib/supervisor/supervisor/supervisorctl.py")
+superconf 	= os.path.join(THIS, "etc/supervisord.conf")
+args_str 	= ' '.join(sys.argv[1:])
 
-sys.exit(0)
+cmd = "cd %(THIS)s && %(superctl)s -c %(superconf)s %(args_str)s" % locals()
+sys.exit(os.system(cmd))

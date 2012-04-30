@@ -23,7 +23,7 @@ def start():
     if ret != 0:
         raise Exception('Error starting RealTime Server')
     
-def stop(quiet=False):
+def stop(quiet=True):
     #cmd = "%s -c %s shutdown" % (SUPERCTL, CONF)
     cmd = "%s shutdown" % (SUPERCTL)
     if quiet:
@@ -50,8 +50,6 @@ def restart(quiet=False):
     
     start()
 
- 
-    
 def status(quiet=False):
     #cmd = "%s -c %s status" % (SUPERCTL, CONF)
     cmd = "%s status" % (SUPERCTL)
@@ -62,3 +60,4 @@ def status(quiet=False):
     ret = os.system(cmd)
     if ret != 0:
         raise Exception('Error getting status of RealTime Server')
+
