@@ -1,25 +1,12 @@
+// RealTime Version SC.4.27.12
 (function($) {
-	
-	var Channel = Base.inherit({
-		name : "",
-		_has : function(method) {
-			return this.hasOwnProperty(method)
-		},
-		onRecieve : null,
-		onSubscribe : null,
-		onUnsubscribe :null,
-		onDisconnect : null, 
-		onError : null
-	});
-	
-	window.RT = Base.inherit({
+
+	window.RT = Root.inherit({
 	    debugging: true,
 	    plugins: {},
 	    channels : {},
 	    socket: null,
-	    channelMethods: {},
 	    identity: null,
-	    notifyOpen: false,
 	    options: {
 	    	subscription : [],
 	        strip: /<[^>]*>/gi,
@@ -30,9 +17,10 @@
 	        resource: "realtime",
 	        channelsCookie: "realTime_channels",
 	        identityCookie: "realTime_identity",
-	        server: "localhost"
+	        server: "remodeler.connectai.com"
 	    },
 	    connect: function(options) {
+	    	if(location.hostname == "localhost") options.server = "localhost";
 	        var connected = RT._connect(options);
 	    },
 	    _connect: function(options) {
@@ -43,7 +31,10 @@
 	    	// extend 2 levels deep our options
 	        for (i in options) {
 	            if (typeof options[i] == "object") {
-	                for (j in options[i]) this.options[i][j] = options[i][j];
+	                for (j in options[i]) {
+	                	if(typeof this.options[i] == "undefined") this.options[i] = {};
+	                	this.options[i][j] = options[i][j];
+	                }
 	            } else {
 	                this.options[i] = options[i];
 	            }
@@ -75,7 +66,14 @@
 	            });
 	            
 	            // after init, we can subscribe
-	            self.subscribe(self.options.subscription);
+	            if(self.options.subscription) {
+	            	self.subscribe(self.options.subscription);
+	            }
+	            
+	            // if we passed a function
+	            if(options.onConnect) {
+	            	options.onConnect();
+	            }
 	            
 	        });
 	        
@@ -87,105 +85,78 @@
 	            if (typeof(json) != "object") json = JSON.parse(json);
 				
 				// if we have an error, throw it
-	            if(json.error) throw(json.error);
+	            if(json.error) self.debug(json.error,json);
 	            
 	            // the date comes in in a stupid format
 	            json.timestamp = self.formatDate(json.timestamp);
 				
-				if(typeof self.channels[json.channel] == "undefined") {
-					throw(json.type+" received on channel ["+json.channel+"] that is not defined");
-				}
-				
-				
-				var channel = self.channels[json.channel];
-				switch(json.type) {
-					case "command":
-						var command = json.data.command;
-						
-						self.debug("Incoming Command",command,json.channel);
-						
-						if(channel._has(command)) {
-							channel[command](json);
-						} else {
-							self.debug("Channel ["+channel.name+"] does not have command ["+command+"] defined");
-						}
-						
-						break;
-					case "message":
-						
-						self.debug("Incoming Message",json,json.channel);
-						
-						if(channel._has("onReceive")) {
-							// make it easier to access msg
-							json.msg = json.data.msg;
-							// call onReceive
-							channel.onReceive(json);
-						} else {
-							throw("onReceive not being handled on Channel ["+channel.name+"]");
-						}
-						break;
-					default:
-						break;
-				}
+				if(typeof self.channels[json.channel] != "undefined") {
+
+					//self.debug(json.type+" received on channel ["+json.channel+"] that is not defined");
+					
+					// pull out the channel
+					var channel = self.channels[json.channel];
+					
+					// handle message types
+					switch(json.type) {
+						case "command":
+							self.debug("Incoming Command",json.data.command,json.channel);
+							
+							// pull out command
+							var command = json.data.command;
+							// if this command method is defined, call it
+							if(channel._has(command)) {
+								// make the options easier
+								json.msg = json.data.options;
+								// call the command
+								channel[command](json);
+							} else {
+								self.debug("Channel ["+channel.name+"] does not have command ["+command+"] defined");
+							}
+							
+							break;
+						case "message":
+							self.debug("Incoming Message",json,json.channel);
+							
+							// if we've defined onReceive, call it
+							if(channel._has("onReceive")) {
+								// make it easier to access msg
+								json.msg = json.data.msg;
+								// call onReceive
+								channel.onReceive(json);
+							} else {
+								throw("onReceive not being handled on Channel ["+channel.name+"]");
+							}
+							break;
+						default:
+							break;
+					}
+				} else {
+					self.debug(json.type+" received on channel ["+json.channel+"] that is not defined");
+				}	
 				
 	        });
 	    },
-	  	subscribe: function(channels,userData) {
+	    
+	    // parses array of channels to subscribe to and subscribes
+	  	subscribe: function(channels,data) {
 	        
 	        // make sure we have an array to use
-	        if (typeof(channels) == "string") {
-	            channels = new Array(channels);
-	        }
+	        if(!io.util.isArray(channels)) channels = [channels];
 	        
 	        // send subscribe per each channel
-	        for (i in channels) {
-                this.socket.send({
-                    type: "command",
-                    channel: channels[i],
-                    data: {
-                        command: "subscribe",
-                        options: userData
-                    }
-                });
+	        for (var i=0; i<channels.length; i++) {
+	        	var name = channels[i];
+	        	//this.debug("channel name",name, this.channels[name]);
+	        	this.channels[name].subscribe(data);
 	        }
 	    },
-	    unsubscribe: function(channels) {
-	        if (typeof(channels) == "string") {
-	            channels = new Array(channels);
-	        }
-	        for (i in channels) {
-	            var channel = channels[i];
-	            this.debug("Subscription: ", channel);
-	            this.socket.send({
-	                type: "command",
-	                channel: channel,
-	                data: {
-	                    command: "unsubscribe"
-	                }
-	            });
-	            this.unSaveChannel(channel);
-	        }
+	    
+	    // shortcut method for publish
+	    publish : function(channel,data) {
+	    	this.channels[channel].publish(data);	
 	    },
-	    publish: function(channel, msg) {
-	    	
-	    	// connect if not connect?
-	        if (!this.socket) this.connect();
-	        
-	        // if our channel isn't defined, throw error
-	        if (!this.channels[channel]) {
-	            throw("Cannot publish. Channel ["+channel+"] not created");
-	        }
-	        
-	        // publish message
-	        this.socket.send({
-	            type: "message",
-	            channel: channel,
-	            data: {
-	                msg: msg
-	            }
-	        });
-	        
-	    },
+	    
 	    createChannel: function(channel, methods) {
 	    	
 	    	// all options are on root level for Channel
@@ -194,31 +165,9 @@
 	    	
 	    	// create an instance of a channel
 	    	this.channels[channel] = Channel.inherit(options);
-	    	
-	    	/*
-	        this.channelMethods[channel] = methods;
-	        this.channelMethods[channel]["_hasMethod"] = function(method) {
-	            return typeof(this[method]) == "function"
-	        }
-	        this.channelMethods[channel]["_triggerEvent"] = function(event, options) {
-	            this.triggerEvent(channel, event, options);
-	        }
-	        this.debug("Creating Channel: ", channel)
-	        */
-	    },
-	    triggerEvent: function(channel, event, options) {
-	        this.debug("triggerEvent: ", event);
-	        this.socket.send({
-	            type: "command",
-	            channel: channel,
-	            data: {
-	                command: event,
-	                options: options
-	            }
-	        });
 	    },
 	    debug: function() {
-	        if(typeof window.console != "undefined") {
+	        if(typeof window.console != "undefined" && RT.debugging) {
 	        	var args = Array.prototype.slice.call(arguments);
 	        	console.log(args);
 	        }
@@ -232,6 +181,8 @@
 	            return timestamp;
 	        }
 	    },
+	    
+	    /*
 	    addMessageEvent: function(channel, callback) {
 	        this.socket.addEvent('message', function(json) {
 	            if (typeof(json) != "object") json = JSON.parse(json);
@@ -250,61 +201,77 @@
 	            }
 	        })
 	    }
+	    */
 	});
+	
+	var Channel = RT.inherit({
+		name : "",
+		_construct : function() {
+			this.debug("created channel ["+this.name+"]");
+		},
+		_has : function(method) {
+			return this.hasOwnProperty(method)
+		},
+		trigger : function(method,data) {
+			this.debug("trigger", method,data);
+	        this.socket.send({
+	            type: "command",
+	            channel: this.name,
+	            data: {
+	                command: method,
+	                options: data
+	            }
+	        });
+		},
+		// publish messages
+	    publish: function(msg) {
+	    	this.debug("Publishing on Channel ["+this.name+"] ",msg);
+	        
+	        // publish message
+	        this.socket.send({
+	            type: "message",
+	            channel: this.name,
+	            data: {
+	                msg: msg
+	            }
+	        });
+	        
+	    },
+	    // subscribe to this channel
+	    subscribe : function(data) {
+	    	this.debug("Subscribing",this.name);
+	    	
+	    	this.socket.send({
+                type: "command",
+                channel: this.name,
+                data: {
+                    command: "subscribe",
+                    options: data
+                }
+            });
+	    },
+	    // unsub from this channel
+	    unsubscribe : function() {
+	    	this.socket.send({
+                type: "command",
+                channel: this.name,
+                data: {
+                    command: "unsubscribe"
+                }
+            });
+	    },
+	    
+	    // methods that the user can handle when the above occur
+		onRecieve : null,
+		onSubscribe : null,
+		onUnsubscribe :null,
+		onDisconnect : null, 
+		onError : null
+	});
+	
+	
 })(window.jQuery);
 
-function setCookie(c_name, value, exdays) {
-    var exdate = new Date();
-    exdate.setDate(exdate.getDate() + exdays);
-    var c_value = escape(value) + ((exdays == null) ? "" : "; expires=" + exdate.toUTCString());
-    document.cookie = c_name + "=" + c_value;
-}
-
-function getCookie(c_name) {
-    var i, x, y, ARRcookies = document.cookie.split(";");
-    for (i = 0; i < ARRcookies.length; i++) {
-        x = ARRcookies[i].substr(0, ARRcookies[i].indexOf("="));
-        y = ARRcookies[i].substr(ARRcookies[i].indexOf("=") + 1);
-        x = x.replace(/^\s+|\s+$/g, "");
-        if (x == c_name) {
-            return unescape(y);
-        }
-    }
-}
-
-function inArray(needle, haystack, argStrict) {
-    var key = '',
-        strict = !! argStrict;
-    if (strict) {
-        for (key in haystack) {
-            if (haystack[key] === needle) return true;
-        }
-    } else {
-        for (key in haystack) {
-            if (haystack[key] == needle) return true;
-        }
-    }
-    return false;
-}
-
-function loadScript(url, callback) {
-    var script = document.createElement("script")
-    script.type = "text/javascript";
-    if (script.readyState) {
-        script.onreadystatechange = function() {
-            if (script.readyState == "loaded" || script.readyState == "complete") {
-                script.onreadystatechange = null;
-                callback();
-            }
-        };
-    } else {
-        script.onload = function() {
-            callback();
-        };
-    }
-    script.src = url;
-    document.getElementsByTagName("head")[0].appendChild(script);
-}
 var dateFormat = function() {
     var token = /d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|[LloSZ]|"[^"]*"|'[^']*'/g,
         timezone = /\b(?:[PMCEA][SDP]T|(?:Pacific|Mountain|Central|Eastern|Atlantic) (?:Standard|Daylight|Prevailing) Time|(?:GMT|UTC)(?:[-+]\d{4})?)\b/g,
