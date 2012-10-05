@@ -152,6 +152,7 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 
 	s.clientsLock.RLock()
 	client, ok := s.clients[c.String()]
+	s.clientsLock.RUnlock()
 
 	if !ok || !client.HasInit() {
 		if msg.Type == "command" && msg.Data["command"] == "init" {
@@ -160,7 +161,6 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 			errMsg := NewErrorMessage("Client has not sent init command yet!")
 			Debugln(errMsg)
 			c.Send(errMsg)
-			s.clientsLock.RUnlock()
 			return
 		}
 	} else if ok {
@@ -169,7 +169,6 @@ func (s *ServerHandler) OnMessage(c *socketio.Conn, data socketio.Message) {
 		Debugln("Received msg from client, yet there is no Client object record from the connection")
 		return
 	}
-	s.clientsLock.RUnlock()
 
 	switch msg.Type {
 
