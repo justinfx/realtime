@@ -83,3 +83,17 @@ func NewJsonMessage(raw []byte) (msg *message, err error) {
 
 	return msg, err
 }
+
+type monitorMessage struct {
+	Channels  []string               `json:"channels"`
+	Identity  string                 `json:"identity"`
+	Timestamp string                 `json:"timestamp"`
+	Data      map[string]interface{} `json:"data"` // client-side specific
+}
+
+func NewMonitorMessage() *monitorMessage {
+	return &monitorMessage{
+		Timestamp: time.Now().UTC().String(),
+		Data:      map[string]interface{}{},
+	}
+}

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	//"http/pprof"
 
 	// 3rd party
@@ -32,11 +34,14 @@ const (
 )
 
 type Config struct {
-	DEBUG         bool
-	PORT          int
-	HWM           int
-	DOMAINS       []string
-	ALLOWED_TYPES []string
+	DEBUG           bool
+	PORT            int
+	HWM             int
+	CONN_TIMEOUT    int
+	DOMAINS         []string
+	ALLOWED_TYPES   []string
+	MONITOR_URL     *url.URL
+	MONITOR_IS_JSON bool
 }
 
 func init() {
@@ -45,11 +50,13 @@ func init() {
 	ROOT, _ = filepath.Abs(root)
 
 	CONFIG = Config{
-		DEBUG:         false,
-		DOMAINS:       []string{"*"},
-		ALLOWED_TYPES: []string{},
-		PORT:          8001,
-		HWM:           5000,
+		DEBUG:           false,
+		DOMAINS:         []string{"*"},
+		ALLOWED_TYPES:   []string{},
+		PORT:            8001,
+		HWM:             5000,
+		CONN_TIMEOUT:    5,
+		MONITOR_IS_JSON: true,
 	}
 
 	var err error
@@ -75,6 +82,17 @@ func main() {
 		if v, e := c.Int("Server", "websocket-port"); e == nil {
 			CONFIG.PORT = v
 		}
+		if v, e := c.Int("Server", "reconnect-timeout"); e == nil {
+			CONFIG.CONN_TIMEOUT = v
+		}
+
+		if v, e := c.String("Monitor", "url"); e == nil {
+			CONFIG.MONITOR_URL, e = url.Parse(v)
+			if e != nil {
+				log.Fatalf("Monitor URL \"%v\" is not valid\n", v)
+			}
+		}
+
 		if v, e := c.Int("Messaging", "message-cache-limit"); e == nil {
 			CONFIG.HWM = v
 		}
@@ -102,14 +120,14 @@ func main() {
 		CONFIG.PORT = *fPort
 	}
 
-	log.Printf("Using config options: DEBUG=%v, PORT=%v, HWM=%v",
-		CONFIG.DEBUG, CONFIG.PORT, CONFIG.HWM)
+	log.Printf("Using config options: DEBUG=%v, PORT=%v, CONN_TIMEOUT=%v, MON=%v",
+		CONFIG.DEBUG, CONFIG.PORT, CONFIG.CONN_TIMEOUT, CONFIG.MONITOR_URL)
 
 	// create the socket.io server
 	config := socketio.DefaultConfig
 	config.QueueLength = CONFIG.HWM
 	config.Origins = CONFIG.DOMAINS
-	config.ReconnectTimeout = 5e9
+	config.ReconnectTimeout = time.Duration(CONFIG.CONN_TIMEOUT) * time.Second
 	config.Resource = "/realtime/"
 
 	if len(CONFIG.ALLOWED_TYPES) > 0 {
@@ -135,7 +153,7 @@ func main() {
 	sio := socketio.NewSocketIO(&config)
 	SERVER = NewServerHandler(sio)
 
-	sio.OnConnect(func(c *socketio.Conn) { SERVER.OnConnect(c) })
+	// sio.OnConnect(func(c *socketio.Conn) { SERVER.OnConnect(c) })
 	sio.OnDisconnect(func(c *socketio.Conn) { SERVER.OnDisconnect(c) })
 	sio.OnMessage(func(c *socketio.Conn, msg socketio.Message) { SERVER.OnMessage(c, msg) })
 	sio.SetAuthorization(func(r *http.Request) bool { return LICENSE.CheckHttpRequest(r) })
@@ -150,7 +168,6 @@ func main() {
 			os.Exit(0)
 		}
 	}()
-
 
 	// start the flash server
 	go func() {

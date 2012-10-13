@@ -13,3 +13,4 @@ src/_bin
 example
 pkg
 realtime.test
+.DS_Store

@@ -8,11 +8,13 @@ package main
 */
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-
+	"log"
+	"net/http"
 	"sync"
-
 	// 3rd party
 	"github.com/justinfx/go-socket.io/socketio"
 )
@@ -30,6 +32,8 @@ type ServerHandler struct {
 	quitting    bool
 
 	identsLock, clientsLock sync.RWMutex
+
+	monitorChannel chan *message
 }
 
 func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
@@ -43,12 +47,22 @@ func NewServerHandler(sio *socketio.SocketIO) (s *ServerHandler) {
 
 		msgChannel:  make(chan *DispatchReq, 5000),
 		srvcChannel: make(chan *DispatchReq, 500),
-		quit:        make(chan bool),
+		quit:        make(chan bool, 3),
 		quitting:    false,
+
+		monitorChannel: make(chan *message, 500),
 	}
 
 	go s.dispatchServices()
 	go s.dispatchMessages()
+
+	if CONFIG.MONITOR_URL != nil {
+		Debugf("Monitor set to POST to URL %s\n", CONFIG.MONITOR_URL.String())
+		go s.updateMonitor()
+
+	} else {
+		s.quit <- true
+	}
 
 	return s
 }
@@ -113,6 +127,13 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 				delete(s.idents, identity)
 				s.identsLock.Unlock()
 			}
+
+			// // Pass along the notifications to the monitor channel
+			// monMsg := NewMonitorMessage()
+			// monMsg.Channels = client.Channels
+			// monMsg.Data["command"] = "unsubscribe"
+			// monMsg.Identity = identity
+			// s.monitorChannel <- monMsg
 
 		} else {
 			client.lock.RUnlock()
@@ -339,8 +360,9 @@ func (s *ServerHandler) Shutdown() {
 
 	close(s.srvcChannel)
 	close(s.msgChannel)
+	close(s.monitorChannel)
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		<-s.quit
 	}
 }
@@ -497,11 +519,59 @@ Dispatch:
 				continue
 			}
 		}
+
+		// Pass along the notifications to the monitor channel
+		// monMsg := NewMonitorMessage()
+		// monMsg.Channels = []string{reply.Channel}
+		// monMsg.Data = reply.Data
+		// monMsg.Identity = reply.Identity
+		s.monitorChannel <- reply
+
 		req.SetDone()
 	}
 	s.quit <- true
 }
 
+func (s *ServerHandler) updateMonitor() {
+
+	var (
+		msg      *message
+		json_msg []byte
+		buf      bytes.Buffer
+		resp     *http.Response
+		err      error
+	)
+
+	for msg = range s.monitorChannel {
+
+		if json_msg, err = json.MarshalIndent(msg, "", "\t"); err != nil {
+			Debugf("updateMonitor(): Failed to parse []*message to json: %s\n", err.Error())
+
+		} else {
+
+			Debugln("updateMonitor(): Notifying")
+
+			buf.Reset()
+			buf.Write(json_msg)
+
+			resp, err = http.Post(CONFIG.MONITOR_URL.String(), "application/json", &buf)
+			if err != nil {
+				log.Println("[WARN] updateMonitor(): POST request failed w/ error: ", err)
+
+			} else if resp.StatusCode != http.StatusOK {
+				log.Println("[WARN] updateMonitor(): POST request failed w/ status code", resp.StatusCode)
+			}
+
+			resp.Body.Close()
+		}
+	}
+
+	s.quit <- true
+}
+
+//
+// Client
+//
 type Client struct {
 	Identity string
 	Conns    []*socketio.Conn
