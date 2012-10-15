@@ -98,8 +98,6 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 		client.lock.RLock()
 		identity := client.Identity
 
-		wg := &sync.WaitGroup{}
-
 		if len(client.Conns) <= 1 {
 			Debugln("OnDisconnect(): Client is last in group. Unsubscribing", client.Channels)
 
@@ -113,13 +111,10 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 			}
 			client.lock.RUnlock()
 
-			for _, m := range msgs {
-				wg.Add(1)
-				go func() {
-					req := NewDispatchReq(c, m, true)
-					s.unsubscribeCmd(req)
-					wg.Done()
-				}()
+			for _, aMsg := range msgs {
+				req := NewDispatchReq(c, aMsg, true)
+				s.unsubscribeCmd(req)
+				<-req.done
 			}
 
 			if identity != "" {
@@ -128,18 +123,9 @@ func (s *ServerHandler) OnDisconnect(c *socketio.Conn) {
 				s.identsLock.Unlock()
 			}
 
-			// // Pass along the notifications to the monitor channel
-			// monMsg := NewMonitorMessage()
-			// monMsg.Channels = client.Channels
-			// monMsg.Data["command"] = "unsubscribe"
-			// monMsg.Identity = identity
-			// s.monitorChannel <- monMsg
-
 		} else {
 			client.lock.RUnlock()
 		}
-
-		wg.Wait()
 
 		client.RemoveConn(c)
 	}
@@ -473,6 +459,7 @@ Dispatch:
 			reply.Data["count"] = len(members)
 
 			s.publish(req.Conn, reply)
+			s.monitorChannel <- reply
 
 			client.AddChannel(msg.Channel)
 
@@ -509,6 +496,7 @@ Dispatch:
 				reply.Data["count"] = len(s.subs[msg.Channel])
 
 				s.publish(req.Conn, reply)
+				s.monitorChannel <- reply
 
 				client.RemoveChannel(msg.Channel)
 
@@ -519,13 +507,6 @@ Dispatch:
 				continue
 			}
 		}
-
-		// Pass along the notifications to the monitor channel
-		// monMsg := NewMonitorMessage()
-		// monMsg.Channels = []string{reply.Channel}
-		// monMsg.Data = reply.Data
-		// monMsg.Identity = reply.Identity
-		s.monitorChannel <- reply
 
 		req.SetDone()
 	}

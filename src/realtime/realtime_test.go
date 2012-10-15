@@ -197,6 +197,11 @@ func TestMessages(t *testing.T) {
 			if err := client.Send(msg); err != nil {
 				t.Fatal("Send:", err)
 			}
+
+			if i % 1000 == 0 {
+				fmt.Println("Waiting a second...")
+				time.Sleep(1e9)
+			}
 		}
 
 		iook.Done()
