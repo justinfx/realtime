@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="realtime.js"></script>
+  <script src="plugins.js"></script>
+  <link rel="stylesheet" type="text/css" href="rt.css"/>
+  <script type="text/javascript">
+    $(function() {
+
+		// connect with identity
+		RT.connect(prompt("name"),{},function() {
+			
+		
+			RT.plugins.liveCounter({
+				channel : "chat_advanced",
+				counter : $(".counterNumber")[0]
+			});
+			
+			RT.plugins.isTyping({
+				channel : "chat_advanced",
+				input : $("#chatText")[0],
+				output : $("#chat")[0]
+			});
+			
+			
+			// once connected subscrube
+    		RT.subscribe("chat_advanced");
+    		
+    		
+    		badge = RT.plugins.badge({
+				container : $("#chat")[0],
+				animate : "none"
+			});
+		});
+		
+		RT.createChannel("chat_advanced",{
+			onReceive : function(res) {
+				var message = res.data.msg;
+				// we could make msg be an object and have a type
+				// but were just gonna say if the first 4 is 'data' its an image
+				if(message.substring(0,4) == "data") {
+					$("#chat").append("<div><img src='" +message + "'/></div>");
+				} else {
+					$("#chat").append("<div>"+res.identity+" - "+message+ "</div>");
+					
+					RT.plugins.notify({
+						title : res.identity+":",
+						theme : "google",
+						position:"topright",
+						msg : message					
+					});
+					
+					badge.update("+1");
+
+				}
+				// always scroll to bottom
+				RT.plugins.scrollToBottom($("#chat")[0]);
+			},
+			onSubscribe : function(res) {
+				$("#chat").append("<div>"+res.identity+" has subscribed</div>");
+				
+				/*
+				RT.plugins.notify({
+					title : "Welcome",
+					theme : "facebook",
+					position:"bottomleft",
+					msg : "who ever you are"					
+				});
+				*/
+				
+			},
+			onUnsubscribe : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has UNsubscribed</div>");
+			},
+			onConnect : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has connected</div>");
+			},
+			onDisconnect : function(res) {
+				$("#chat").append("<div>["+res.timestamp+"] :  "+res.identity+" has disconnected</div>");
+			},
+			onError : function(res) {
+				RT.debug("error: ",res);
+			}
+		});
+		
+        //send the message when submit is clicked
+        $('#chatform').submit(function () {
+			if($("#chatText").val()) {
+        		RT.publish("chat_advanced",$("#chatText").val());
+				$("#chatText").val("");
+			}	
+            return false;
+        });
+     	
+     	// drag and drop into the chat
+     	// dont allow dragover to stop us
+     	$("#chat").bind({
+     		dragover : function(e) {
+     			return false;
+     		},
+     		drop : function(e) {
+     			var file = e.originalEvent.dataTransfer.files[0];
+				var fr = new FileReader();
+				fr.onload = function(e) { 
+					RT.publish("chat_advanced",e.target.result);
+				}
+				fr.readAsDataURL(file);
+				return false;
+     		}
+     	});
+     	
+     	$(".unsub").click(function() {
+     		RT.unsubscribe("chat_advanced");
+     		return false;
+     	});
+     	
+     	
+     	$(".badgeOff").click(function() {
+     		badge.update("-1");
+     		return false;
+     	})
+     	
+     	$(".badgeUp").click(function() {
+     		badge.update("+1");
+     		return false;
+     	})
+     	
+    });
+
+</script>
+</head>
+<body>
+<h3>Chat!</h3>
+
+<!-- live counter widget -->
+<div class="liveCounter">
+	<div class="counterNumber">0</div>
+	<div class="counterText">Users Online</div>
+</div>
+
+<div id="chat" style="width: 40em; height: 20em; overflow:auto; border: 1px solid black">
+</div>
+<form id="chatform">
+<input type="text" id="chatText"/>
+<input type="submit" />
+<input type="button" class="badgeUp" value="plus 1" />
+<input type="button" class="badgeOff" value="minus 1" />
+<input type="button" class="unsub" value="unsub"/>
+
+
+</form>
+</body>
+</html>

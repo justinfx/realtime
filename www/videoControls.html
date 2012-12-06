@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="realtime.js"></script>
+  <script src="video.js"></script>
+  <link rel="stylesheet" type="text/css" href="rt.css"/>
+  <style type="text/css">
+  
+  </style>
+  <script type="text/javascript">
+  	$(function() {
+  		RT.connect();
+  		
+  		$("video").bind("play",function() {
+  			RT.publish("video",{
+  				action : "play",
+  				time : video.currentTime
+  			});	
+  		});
+
+  	
+	  	$("video").bind("pause",function() {
+	  		RT.publish("video",{
+	  			action : "pause",
+	  			time : video.currentTime
+	  		});
+	  	});
+	  		
+	  	$("video").bind("seeking",function() {
+	  		RT.publish("video",{
+	  			action : "seeking",
+	  			time : video.currentTime
+	  		});
+	  	});
+	  	
+  	});
+  </script>
+ </head>
+ <body>
+ 	<video id="video" width="640" height="360" controls preload>
+	<source src="bunny.mp4" type="video/mp4">
+</video>
+ </body> 

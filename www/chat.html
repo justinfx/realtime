@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://code.jquery.com/jquery-latest.min.js"></script>
+  <script src="root.js"></script>
+  <script src="realtime.js"></script>
+  <script src="realtime_channels.js"></script>
+  <style type="text/css">
+  	#chat {
+  		width:300px;
+  		height:300px;
+  		border:1px solid black;
+  	}
+
+  </style>
+  <script type="text/javascript">
+    $(function() {
+		
+		// connect with identity
+		RT.connect({
+			identity : Root.generateId().toString(),
+			server : "localhost",
+			port : "8001",
+			subscription : ["chat_test"]
+		});
+
+        //send the message when submit is clicked
+        $('#chatform').submit(function () {
+			if(val = $("#chatText").val()) {
+        		RT.publish("chat_test",val); // = RT.channels["chat_test"].publish(val);
+				$("#chatText").val("");
+			}	
+            return false;
+        });
+    });
+</script>
+</head>
+	<body>
+		<h3>Chat!</h3>
+		<div id="chat"></div>
+		<form id="chatform">
+			<input type="text" id="chatText"/>
+			<input type="submit" />
+		</form>
+	</body>
+</html>

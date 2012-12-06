@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+  <script src="realtime.js"></script>
+  <script src="plugins.js"></script>
+  <script src="video.js"></script>
+  <link rel="stylesheet" type="text/css" href="rt.css"/>
+  <style type="text/css">
+  
+  </style>
+  <script type="text/javascript">
+	RT.connect("",{},function() {
+		RT.subscribe("video");
+	});
+	
+	
+  </script>
+ </head>
+ <body>
+ 	<video id="video" width="300" height="120" preload>
+	<source src="http://clips.vorwaerts-gmbh.de/VfE_html5.mp4" type="video/mp4">
+	<source src="http://clips.vorwaerts-gmbh.de/VfE.webm" type="video/webm">
+	<source src="http://clips.vorwaerts-gmbh.de/VfE.ogv" type="video/ogg">
+</video>
+ </body> 
