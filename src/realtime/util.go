@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	// License checking is sha1("domain.com"+PADDING)
 	PADDING = []byte("Rk8ohYJQBXopu82XmVTFsAgG3r4f")
 )
 

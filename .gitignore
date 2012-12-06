@@ -4,7 +4,6 @@ _.*
 *.rdb
 build
 dist
-realtime
 *.gz
 *.zip
 *.pyc
