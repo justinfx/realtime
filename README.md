@@ -9,3 +9,9 @@ The package is also wrapped up to integrate with Supervisor for managing the pro
 Currently this version of the server only support socket.io 0.6.x
 There is apparently a newer fork of go-socket.io compatible to 0.9.0 here:
 http://code.google.com/p/go-socketio/
+
+The client code is included as a submodule and directly location here:
+https://github.com/justinfx/realtime-client
+
+Detailed client information and examples can be found here:
+http://connectai.com/realtime
