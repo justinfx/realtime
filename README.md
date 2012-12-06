@@ -14,3 +14,10 @@ https://github.com/justinfx/realtime-client
 
 Detailed client information and examples can be found here:
 http://connectai.com/realtime
+
+---------------------
+
+The server by itself can be installed directly with go install:  
+`go install github.com/justinfx/realtime/src/realtime`
+
+But to get all the support tools and package structure, you should clone the entire repository.
