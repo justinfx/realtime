@@ -1,9 +1,6 @@
-[submodule "www"]
-	path = www
-	url = git@repo.justinfx.com:justinfx/RealTime-Client.git
 [submodule "lib/supervisor"]
 	path = lib/supervisor
-	url = git@repo.justinfx.com:justinfx/RealTime-Supervisor.git 
+	url = git://github.com/Supervisor/supervisor.git
 [submodule "lib/meld3"]
 	path = lib/meld3
 	url = git://github.com/Supervisor/meld3.git
