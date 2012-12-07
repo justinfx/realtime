@@ -27,6 +27,11 @@ http://connectai.com/realtime
 
 ## Installation
 
+**Binary builds** (if available):  
+https://github.com/justinfx/realtime/downloads
+
+**From source**:
+
 To get the entire application with all support files:
 
 ```
