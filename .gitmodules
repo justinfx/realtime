@@ -1,6 +1,6 @@
 [submodule "lib/supervisor"]
 	path = lib/supervisor
-	url = git://github.com/Supervisor/supervisor.git
+url=git://github.com/justinfx/supervisor.git
 [submodule "lib/meld3"]
 	path = lib/meld3
 	url = git://github.com/Supervisor/meld3.git
